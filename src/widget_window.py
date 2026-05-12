@@ -21,6 +21,7 @@ from logo_cache import LogoCache
 from models import Game, League, LeagueSnapshot
 from settings_store import SettingsStore
 from ui.game_row import GameRow
+from ui.league_filter_bar import LeagueFilterBar
 from ui.section_header import SectionHeader, apply_text_shadow
 
 LEAGUES: tuple[League, ...] = get_args(League)
@@ -39,6 +40,7 @@ class WidgetWindow(QWidget):
         self._favorites_only: bool = settings.load_favorites_only()
         self._locked: bool = settings.load_locked()
         self._collapsed: dict[str, bool] = settings.load_collapsed_sections()
+        self._enabled_leagues: set[str] = settings.load_enabled_leagues()
         self._drag_offset: QPoint | None = None
 
         self._build_window_flags()
@@ -82,6 +84,11 @@ class WidgetWindow(QWidget):
         frame_layout = QVBoxLayout(self._frame)
         frame_layout.setContentsMargins(0, 0, 0, 0)
         frame_layout.setSpacing(0)
+
+        # League filter bar
+        self._filter_bar = LeagueFilterBar(self._enabled_leagues, self._frame)
+        self._filter_bar.league_toggled.connect(self._on_league_toggled)
+        frame_layout.addWidget(self._filter_bar)
 
         # Scrollable game list
         self._scroll = QScrollArea(self._frame)
@@ -176,6 +183,14 @@ class WidgetWindow(QWidget):
     def _on_logo_ready(self, _league: str, _team_id: str) -> None:
         self._logo_render_timer.start()
 
+    def _on_league_toggled(self, league: str, enabled: bool) -> None:
+        if enabled:
+            self._enabled_leagues.add(league)
+        else:
+            self._enabled_leagues.discard(league)
+        self._settings.save_enabled_leagues(self._enabled_leagues)
+        self._render()
+
     def _on_section_toggled(self, key: str, collapsed: bool) -> None:
         self._collapsed[key] = collapsed
         self._settings.save_collapsed_sections(self._collapsed)
@@ -251,6 +266,8 @@ class WidgetWindow(QWidget):
     def _collect_games(self) -> list[Game]:
         out: list[Game] = []
         for lg in LEAGUES:
+            if lg not in self._enabled_leagues:
+                continue
             snap = self._snapshots.get(lg)
             if not snap:
                 continue

@@ -66,6 +66,25 @@ class SettingsStore:
         except TypeError:
             return set()
 
+    # --- Enabled leagues (filter bar) ---
+    _ALL_LEAGUES = ("mlb", "nba", "nfl", "nhl")
+
+    def save_enabled_leagues(self, leagues: set[str]) -> None:
+        self._s.setValue("view/enabled_leagues", sorted(leagues))
+
+    def load_enabled_leagues(self) -> set[str]:
+        if not self._s.contains("view/enabled_leagues"):
+            return set(self._ALL_LEAGUES)
+        v = self._s.value("view/enabled_leagues", [])
+        if v is None:
+            return set()
+        if isinstance(v, str):
+            return {v} if v else set()
+        try:
+            return {str(x) for x in v if x}
+        except TypeError:
+            return set(self._ALL_LEAGUES)
+
     # --- Collapsed sections ---
     def save_collapsed_sections(self, collapsed: dict[str, bool]) -> None:
         # QSettings INI can't store dicts directly; serialize as key list.
