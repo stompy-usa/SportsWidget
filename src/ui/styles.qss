@@ -1,0 +1,134 @@
+/* Sports Widget — minimalist dark theme */
+
+#RootFrame {
+    background-color: rgba(20, 22, 28, 220);
+    border: 1px solid rgba(255, 255, 255, 28);
+    border-radius: 10px;
+}
+
+#HeaderBar {
+    background-color: rgba(0, 0, 0, 60);
+    border-top-left-radius: 10px;
+    border-top-right-radius: 10px;
+    border-bottom: 1px solid rgba(255, 255, 255, 18);
+}
+
+#HeaderTitle {
+    color: #e6e6e6;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+
+#HeaderStatus {
+    color: #8a8f99;
+    font-size: 10px;
+}
+
+QPushButton#HeaderButton {
+    color: #c8ccd4;
+    background: transparent;
+    border: none;
+    padding: 2px 6px;
+    font-size: 13px;
+}
+QPushButton#HeaderButton:hover {
+    color: #ffffff;
+}
+QPushButton#HeaderButton:checked {
+    color: #f5c542;
+}
+
+#GamesScrollArea {
+    background: transparent;
+    border: none;
+}
+#GamesScrollArea > QWidget > QWidget { background: transparent; }
+
+QScrollBar:vertical {
+    background: transparent;
+    width: 8px;
+    margin: 2px;
+}
+QScrollBar::handle:vertical {
+    background: rgba(255, 255, 255, 40);
+    border-radius: 4px;
+    min-height: 20px;
+}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: none; }
+
+#SectionLabel {
+    color: #7e8492;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    padding: 6px 8px 2px 8px;
+}
+
+#GameRow {
+    background-color: rgba(255, 255, 255, 6);
+    border-radius: 6px;
+}
+#GameRow[favorite="true"] {
+    background-color: rgba(245, 197, 66, 26);
+}
+
+#LeagueBadge {
+    color: #b9bdc7;
+    font-size: 10px;
+    font-weight: 700;
+    background-color: rgba(255, 255, 255, 14);
+    border-radius: 4px;
+    padding: 2px 5px;
+    min-width: 28px;
+}
+
+#Matchup {
+    color: #ffffff;
+    font-size: 12px;
+}
+#ScoreText {
+    color: #ffffff;
+    font-size: 12px;
+    font-weight: 600;
+}
+#StatusText {
+    color: #9ea3ad;
+    font-size: 10px;
+}
+#StatusLive {
+    color: #4ade80;
+    font-size: 10px;
+    font-weight: 700;
+}
+#StatusFinal {
+    color: #7e8492;
+    font-size: 10px;
+}
+
+#EmptyLabel {
+    color: #7e8492;
+    font-size: 11px;
+    padding: 20px;
+}
+
+QDialog {
+    background-color: #1a1c22;
+    color: #e6e6e6;
+}
+QTabWidget::pane { border: 1px solid #2a2d35; }
+QTabBar::tab {
+    background: #232630;
+    color: #c8ccd4;
+    padding: 6px 12px;
+    border: 1px solid #2a2d35;
+}
+QTabBar::tab:selected { background: #2f3340; color: #ffffff; }
+QListWidget {
+    background-color: #232630;
+    color: #e6e6e6;
+    border: 1px solid #2a2d35;
+}
+QListWidget::item { padding: 4px 6px; }
+QListWidget::item:selected { background-color: #3a3f4d; }

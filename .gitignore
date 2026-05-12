@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.Python
+
+# Virtual env
+.venv/
+venv/
+env/
+
+# IDEs / editors
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Local logs / state (the app writes these to %APPDATA% normally,
+# but ignore them here in case anyone runs in-place)
+*.log
+settings.ini
+teams.json
