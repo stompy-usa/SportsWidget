@@ -14,9 +14,9 @@ log = logging.getLogger(__name__)
 LOGOS_DIR = CONFIG_DIR / "logos"
 LOGOS_DIR.mkdir(parents=True, exist_ok=True)
 
-# Logo render height in CSS pixels — close to the 12px font we use for matchups.
+# Logo render height in CSS pixels — close to the matchup font size.
 # We download/store the original (typically 500px) and scale to this on read.
-LOGO_HEIGHT_PX = 14
+LOGO_HEIGHT_PX = 16
 
 
 class _LogoFetchSignals(QObject):

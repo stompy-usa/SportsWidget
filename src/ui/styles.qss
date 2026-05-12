@@ -29,13 +29,13 @@ QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: none;
 }
 #SectionLabel {
     color: #ffffff;
-    font-size: 11px;
+    font-size: 13px;
     font-weight: 700;
     letter-spacing: 1px;
 }
 #SectionArrow {
     color: #ffffff;
-    font-size: 9px;
+    font-size: 11px;
 }
 
 #GameRow {
@@ -44,50 +44,50 @@ QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: none;
 
 #LeagueBadge {
     color: #ffffff;
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 700;
     letter-spacing: 0.5px;
-    min-width: 28px;
+    min-width: 32px;
 }
 
 #FavoriteStar {
     color: #f5c542;
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 700;
 }
 
 #Matchup {
     color: #ffffff;
-    font-size: 12px;
+    font-size: 14px;
 }
 #ScoreText {
     color: #ffffff;
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 600;
 }
 #StatusText {
     color: #ffffff;
-    font-size: 10px;
+    font-size: 12px;
 }
 #StatusLive {
     color: #4ade80;
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 700;
 }
 #StatusFinal {
     color: #ffffff;
-    font-size: 10px;
+    font-size: 12px;
 }
 
 #EmptyLabel {
     color: #ffffff;
-    font-size: 11px;
+    font-size: 13px;
     padding: 20px;
 }
 
 #StaleIndicator {
     color: #ef4444;
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 700;
 }
 
