@@ -32,14 +32,8 @@ class GameRow(QWidget):
             self.setToolTip("Open on ESPN")
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(8, 3, 8, 3)
+        layout.setContentsMargins(8, 4, 8, 4)
         layout.setSpacing(6)
-
-        badge = QLabel(game.league.upper())
-        badge.setObjectName("LeagueBadge")
-        badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        apply_text_shadow(badge)
-        layout.addWidget(badge)
 
         if is_favorite:
             star = QLabel("★")
@@ -47,59 +41,60 @@ class GameRow(QWidget):
             apply_text_shadow(star)
             layout.addWidget(star)
 
-        layout.addWidget(_team_widget(game.league, game.away_team_id, game.away_abbr, game.away_logo_url))
+        # --- Away group: logo, name, score ---
+        layout.addWidget(_team_logo(game.league, game.away_team_id, game.away_logo_url))
 
-        at_label = QLabel("@")
-        at_label.setObjectName("Matchup")
-        apply_text_shadow(at_label)
-        layout.addWidget(at_label)
+        away_name = QLabel(game.away_short_name or game.away_abbr)
+        away_name.setObjectName("TeamName")
+        apply_text_shadow(away_name)
+        layout.addWidget(away_name)
 
-        layout.addWidget(_team_widget(game.league, game.home_team_id, game.home_abbr, game.home_logo_url))
+        if game.state in ("in", "post"):
+            away_score = QLabel(game.away_score or "0")
+            away_score.setObjectName("TeamScore")
+            apply_text_shadow(away_score)
+            layout.addWidget(away_score)
 
         layout.addStretch(1)
 
-        # "Game detail" link for pre/live games (not post). Always present so the
-        # hit area is stable — styled subtle by default, brighter on hover via QSS.
+        # --- Status (middle) ---
+        status_text = game.status_detail or _default_status(game.state)
+        if status_text:
+            status = QLabel(status_text)
+            status.setObjectName(_status_object_name(game.state))
+            apply_text_shadow(status)
+            layout.addWidget(status)
+
+        layout.addStretch(1)
+
+        # --- Home group: score, name, logo (mirrored) ---
+        if game.state in ("in", "post"):
+            home_score = QLabel(game.home_score or "0")
+            home_score.setObjectName("TeamScore")
+            apply_text_shadow(home_score)
+            layout.addWidget(home_score)
+
+        home_name = QLabel(game.home_short_name or game.home_abbr)
+        home_name.setObjectName("TeamName")
+        apply_text_shadow(home_name)
+        layout.addWidget(home_name)
+
+        layout.addWidget(_team_logo(game.league, game.home_team_id, game.home_logo_url))
+
+        # --- Game detail link (pre/live only) ---
         if game.state in ("in", "pre"):
             self._detail_btn = QPushButton("Game detail", self)
             self._detail_btn.setObjectName("MoreDetailButton")
             self._detail_btn.setCursor(Qt.CursorShape.PointingHandCursor)
             self._detail_btn.setFlat(True)
-            self._detail_btn.setToolTip("Show live game detail")
+            self._detail_btn.setToolTip("Show game detail")
             self._detail_btn.clicked.connect(self._emit_detail_requested)
             layout.addWidget(self._detail_btn)
 
-        if game.state == "in":
-            score = QLabel(f"{game.away_score} - {game.home_score}")
-            score.setObjectName("ScoreText")
-            apply_text_shadow(score)
-            layout.addWidget(score)
-            status = QLabel(game.status_detail or "LIVE")
-            status.setObjectName("StatusLive")
-            apply_text_shadow(status)
-            layout.addWidget(status)
-        elif game.state == "post":
-            score = QLabel(f"{game.away_score} - {game.home_score}")
-            score.setObjectName("ScoreText")
-            apply_text_shadow(score)
-            layout.addWidget(score)
-            status = QLabel(game.status_detail or "Final")
-            status.setObjectName("StatusFinal")
-            apply_text_shadow(status)
-            layout.addWidget(status)
-        else:
-            status = QLabel(game.status_detail or "Scheduled")
-            status.setObjectName("StatusText")
-            apply_text_shadow(status)
-            layout.addWidget(status)
-
     # ---- Mouse: click opens URL; drag moves the window ----
-    # We disambiguate click vs drag with a small movement threshold so the user
-    # can grab a row to move the widget without accidentally opening a page.
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
         if event.button() != Qt.MouseButton.LeftButton:
-            # Right-click / middle-click bubble up so the widget's context menu works.
             event.ignore()
             return
         self._press_pos = event.globalPosition().toPoint()
@@ -140,18 +135,31 @@ class GameRow(QWidget):
             self.detail_requested.emit(self._league, self._event_id)
 
 
-def _team_widget(league: str, team_id: str, abbreviation: str, logo_url: str) -> QLabel:
+def _team_logo(league: str, team_id: str, logo_url: str) -> QLabel:
+    """Logo-only widget; the team name lives in a sibling QLabel."""
     cache = LogoCache.instance()
     pix = cache.get(league, team_id)
     label = QLabel()
-    label.setObjectName("Matchup")
+    label.setObjectName("TeamLogo")
     label.setAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
     if pix is not None:
         label.setPixmap(pix)
         label.setFixedHeight(LOGO_HEIGHT_PX + 2)
-    else:
-        label.setText(abbreviation)
-        if logo_url and team_id:
-            cache.request(league, team_id, logo_url)
+    elif logo_url and team_id:
+        cache.request(league, team_id, logo_url)
     apply_text_shadow(label)
     return label
+
+
+def _status_object_name(state: str) -> str:
+    if state == "in":
+        return "StatusLive"
+    if state == "post":
+        return "StatusFinal"
+    return "StatusText"
+
+
+def _default_status(state: str) -> str:
+    if state == "post":
+        return "Final"
+    return ""

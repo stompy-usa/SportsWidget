@@ -35,6 +35,8 @@ class Game:
     away_abbr: str
     away_score: str
     away_logo_url: str
+    home_short_name: str = ""   # "Rangers", "White Sox", etc.
+    away_short_name: str = ""
 
     @property
     def home_key(self) -> str:

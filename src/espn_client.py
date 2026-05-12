@@ -93,6 +93,8 @@ def _parse_event(league: League, ev: dict) -> Game | None:
             away_abbr=_abbr(away),
             away_score=str(away.get("score", "") or ""),
             away_logo_url=_logo_url(away),
+            home_short_name=_short_name(home),
+            away_short_name=_short_name(away),
         )
     except Exception as exc:  # noqa: BLE001
         log.debug("Skipping malformed event for %s: %s", league, exc)
@@ -112,6 +114,17 @@ def _abbr(competitor: dict) -> str:
 def _team_id(competitor: dict) -> str:
     team = competitor.get("team", {}) or {}
     return str(team.get("id", "") or "")
+
+
+def _short_name(competitor: dict) -> str:
+    team = competitor.get("team", {}) or {}
+    return (
+        team.get("shortDisplayName")
+        or team.get("name")
+        or team.get("displayName")
+        or team.get("abbreviation")
+        or "?"
+    )
 
 
 def _logo_url(competitor: dict) -> str:

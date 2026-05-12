@@ -42,6 +42,27 @@ QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: none;
     background: transparent;
 }
 
+#FavoriteStar {
+    color: #f5c542;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+#TeamLogo {
+    background: transparent;
+}
+#TeamName {
+    color: #ffffff;
+    font-size: 14px;
+    font-weight: 500;
+}
+#TeamScore {
+    color: #ffffff;
+    font-size: 15px;
+    font-weight: 700;
+}
+
+/* Legacy aliases (used in detail panel headers/body) */
 #LeagueBadge {
     color: #ffffff;
     font-size: 12px;
@@ -49,13 +70,6 @@ QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: none;
     letter-spacing: 0.5px;
     min-width: 32px;
 }
-
-#FavoriteStar {
-    color: #f5c542;
-    font-size: 14px;
-    font-weight: 700;
-}
-
 #Matchup {
     color: #ffffff;
     font-size: 14px;
@@ -65,18 +79,21 @@ QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: none;
     font-size: 14px;
     font-weight: 600;
 }
+
 #StatusText {
-    color: #ffffff;
-    font-size: 12px;
+    color: rgba(255, 255, 255, 200);
+    font-size: 11px;
 }
 #StatusLive {
     color: #4ade80;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 700;
 }
 #StatusFinal {
-    color: #ffffff;
-    font-size: 12px;
+    color: rgba(255, 255, 255, 200);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
 }
 
 #EmptyLabel {
