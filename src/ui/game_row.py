@@ -1,17 +1,43 @@
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QPoint, Qt, QUrl
+from PySide6.QtGui import QDesktopServices, QMouseEvent
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QWidget
 
 from logo_cache import LOGO_HEIGHT_PX, LogoCache
 from models import Game
 from ui.section_header import apply_text_shadow
 
+_DRAG_THRESHOLD_PX = 4  # Manhattan distance before a press becomes a drag
+
+_LEAGUE_URL_SLUG = {
+    "mlb": "mlb",
+    "nba": "nba",
+    "nfl": "nfl",
+    "nhl": "nhl",
+}
+
+
+def _espn_game_url(game: Game) -> str:
+    slug = _LEAGUE_URL_SLUG.get(game.league)
+    if not slug or not game.event_id:
+        return ""
+    return f"https://www.espn.com/{slug}/game/_/gameId/{game.event_id}"
+
 
 class GameRow(QWidget):
     def __init__(self, game: Game, is_favorite: bool, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("GameRow")
+
+        self._url = _espn_game_url(game)
+        self._press_pos: QPoint | None = None
+        self._drag_offset: QPoint | None = None
+        self._dragging = False
+
+        if self._url:
+            self.setCursor(Qt.CursorShape.PointingHandCursor)
+            self.setToolTip("Open on ESPN")
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(8, 3, 8, 3)
@@ -38,7 +64,6 @@ class GameRow(QWidget):
 
         layout.addWidget(_team_widget(game.home_team_id, game.home_abbr, game.home_logo_url))
 
-        # Push the score/status to the right.
         layout.addStretch(1)
 
         if game.state == "in":
@@ -65,13 +90,50 @@ class GameRow(QWidget):
             apply_text_shadow(status)
             layout.addWidget(status)
 
+    # ---- Mouse: click opens URL; drag moves the window ----
+    # We disambiguate click vs drag with a small movement threshold so the user
+    # can grab a row to move the widget without accidentally opening a page.
+
+    def mousePressEvent(self, event: QMouseEvent) -> None:
+        if event.button() != Qt.MouseButton.LeftButton:
+            # Right-click / middle-click bubble up so the widget's context menu works.
+            event.ignore()
+            return
+        self._press_pos = event.globalPosition().toPoint()
+        self._dragging = False
+        win = self.window()
+        if not getattr(win, "_locked", False):
+            self._drag_offset = self._press_pos - win.frameGeometry().topLeft()
+        else:
+            self._drag_offset = None
+        event.accept()
+
+    def mouseMoveEvent(self, event: QMouseEvent) -> None:
+        if self._press_pos is None:
+            return super().mouseMoveEvent(event)
+        if not (event.buttons() & Qt.MouseButton.LeftButton):
+            return
+        current = event.globalPosition().toPoint()
+        if not self._dragging:
+            if (current - self._press_pos).manhattanLength() > _DRAG_THRESHOLD_PX:
+                self._dragging = True
+        if self._dragging and self._drag_offset is not None:
+            self.window().move(current - self._drag_offset)
+        event.accept()
+
+    def mouseReleaseEvent(self, event: QMouseEvent) -> None:
+        if event.button() != Qt.MouseButton.LeftButton:
+            return super().mouseReleaseEvent(event)
+        was_click = self._press_pos is not None and not self._dragging
+        self._press_pos = None
+        self._drag_offset = None
+        self._dragging = False
+        if was_click and self._url:
+            QDesktopServices.openUrl(QUrl(self._url))
+        event.accept()
+
 
 def _team_widget(team_id: str, abbreviation: str, logo_url: str) -> QLabel:
-    """Return a QLabel showing the team's logo if cached, otherwise its abbreviation.
-
-    If the logo isn't cached yet but a URL is known, queues a background download.
-    The widget tree re-renders on the LogoCache.logo_ready signal.
-    """
     cache = LogoCache.instance()
     pix = cache.get(team_id)
     label = QLabel()
