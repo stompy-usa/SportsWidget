@@ -66,5 +66,22 @@ class SettingsStore:
         except TypeError:
             return set()
 
+    # --- Collapsed sections ---
+    def save_collapsed_sections(self, collapsed: dict[str, bool]) -> None:
+        # QSettings INI can't store dicts directly; serialize as key list.
+        keys = [k for k, v in collapsed.items() if v]
+        self._s.setValue("view/collapsed", keys)
+
+    def load_collapsed_sections(self) -> dict[str, bool]:
+        v = self._s.value("view/collapsed", [])
+        if v is None:
+            return {}
+        if isinstance(v, str):
+            return {v: True} if v else {}
+        try:
+            return {str(k): True for k in v if k}
+        except TypeError:
+            return {}
+
     def sync(self) -> None:
         self._s.sync()
