@@ -106,6 +106,88 @@ QLabel#LeagueFilterBadge[active="false"] {
     color: rgba(255, 255, 255, 70);
 }
 
+/* --- Live game detail panel --- */
+
+#DetailPanel {
+    background: transparent;
+    border-top: 1px solid rgba(255, 255, 255, 30);
+    border-bottom: 1px solid rgba(255, 255, 255, 30);
+}
+
+#DetailHeaderTeam {
+    color: #ffffff;
+    font-size: 13px;
+    font-weight: 700;
+}
+#DetailHeaderScore {
+    color: #ffffff;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+QPushButton#DetailCloseButton {
+    color: #ffffff;
+    background: transparent;
+    border: none;
+    font-size: 16px;
+    padding: 0 6px;
+}
+QPushButton#DetailCloseButton:hover {
+    color: #ef4444;
+}
+
+QPushButton#DetailEspnButton {
+    color: #ffffff;
+    background: transparent;
+    border: none;
+    font-size: 11px;
+    text-decoration: underline;
+    padding: 2px 4px;
+}
+QPushButton#DetailEspnButton:hover {
+    color: #f5c542;
+}
+
+#DetailLabel {
+    color: rgba(255, 255, 255, 180);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+}
+#DetailLine {
+    color: #ffffff;
+    font-size: 12px;
+}
+#DetailLastPlay {
+    color: rgba(255, 255, 255, 200);
+    font-size: 11px;
+    font-style: italic;
+}
+
+/* Bases diamond */
+#BaseDot {
+    border: 1px solid rgba(255, 255, 255, 140);
+    border-radius: 5px;
+    background: transparent;
+}
+#BaseDot[occupied="true"] {
+    background-color: #f5c542;
+    border: 1px solid #f5c542;
+}
+
+/* "More detail" reveal button on live rows */
+QPushButton#MoreDetailButton {
+    color: #ffffff;
+    background: transparent;
+    border: none;
+    font-size: 11px;
+    text-decoration: underline;
+    padding: 0 4px;
+}
+QPushButton#MoreDetailButton:hover {
+    color: #f5c542;
+}
+
 /* Dialogs keep a solid dark background for legibility. */
 QDialog {
     background-color: #1a1c22;

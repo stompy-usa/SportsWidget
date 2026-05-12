@@ -1,39 +1,32 @@
 from __future__ import annotations
 
-from PySide6.QtCore import QPoint, Qt, QUrl
+from PySide6.QtCore import QEvent, QPoint, Qt, QUrl, Signal
 from PySide6.QtGui import QDesktopServices, QMouseEvent
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QWidget
 
 from logo_cache import LOGO_HEIGHT_PX, LogoCache
 from models import Game
 from ui.section_header import apply_text_shadow
+from urls import espn_game_url
 
 _DRAG_THRESHOLD_PX = 4  # Manhattan distance before a press becomes a drag
 
-_LEAGUE_URL_SLUG = {
-    "mlb": "mlb",
-    "nba": "nba",
-    "nfl": "nfl",
-    "nhl": "nhl",
-}
-
-
-def _espn_game_url(game: Game) -> str:
-    slug = _LEAGUE_URL_SLUG.get(game.league)
-    if not slug or not game.event_id:
-        return ""
-    return f"https://www.espn.com/{slug}/game/_/gameId/{game.event_id}"
-
 
 class GameRow(QWidget):
+    detail_requested = Signal(str, str)  # (league, event_id)
+
     def __init__(self, game: Game, is_favorite: bool, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("GameRow")
+        self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
 
-        self._url = _espn_game_url(game)
+        self._league = game.league
+        self._event_id = game.event_id
+        self._url = espn_game_url(game.league, game.event_id)
         self._press_pos: QPoint | None = None
         self._drag_offset: QPoint | None = None
         self._dragging = False
+        self._detail_btn: QPushButton | None = None
 
         if self._url:
             self.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -67,6 +60,14 @@ class GameRow(QWidget):
         layout.addStretch(1)
 
         if game.state == "in":
+            self._detail_btn = QPushButton("More detail", self)
+            self._detail_btn.setObjectName("MoreDetailButton")
+            self._detail_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            self._detail_btn.setFlat(True)
+            self._detail_btn.setVisible(False)
+            self._detail_btn.clicked.connect(self._emit_detail_requested)
+            layout.addWidget(self._detail_btn)
+
             score = QLabel(f"{game.away_score} - {game.home_score}")
             score.setObjectName("ScoreText")
             apply_text_shadow(score)
@@ -131,6 +132,22 @@ class GameRow(QWidget):
         if was_click and self._url:
             QDesktopServices.openUrl(QUrl(self._url))
         event.accept()
+
+    # ---- Hover: reveal/hide the "More detail" button for live games ----
+
+    def enterEvent(self, event: QEvent) -> None:
+        if self._detail_btn is not None:
+            self._detail_btn.setVisible(True)
+        super().enterEvent(event)
+
+    def leaveEvent(self, event: QEvent) -> None:
+        if self._detail_btn is not None:
+            self._detail_btn.setVisible(False)
+        super().leaveEvent(event)
+
+    def _emit_detail_requested(self) -> None:
+        if self._event_id:
+            self.detail_requested.emit(self._league, self._event_id)
 
 
 def _team_widget(league: str, team_id: str, abbreviation: str, logo_url: str) -> QLabel:

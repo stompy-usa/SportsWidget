@@ -16,10 +16,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from fetch_worker import FetchRunnable
+from fetch_worker import DetailFetchRunnable, FetchRunnable
 from logo_cache import LogoCache
-from models import Game, League, LeagueSnapshot
+from models import Game, GameDetail, League, LeagueSnapshot
 from settings_store import SettingsStore
+from ui.detail_panel import DetailPanel
 from ui.game_row import GameRow
 from ui.league_filter_bar import LeagueFilterBar
 from ui.section_header import SectionHeader, apply_text_shadow
@@ -42,6 +43,9 @@ class WidgetWindow(QWidget):
         self._collapsed: dict[str, bool] = settings.load_collapsed_sections()
         self._enabled_leagues: set[str] = settings.load_enabled_leagues()
         self._drag_offset: QPoint | None = None
+        self._open_detail_event_id: str | None = None
+        self._open_detail_league: League | None = None
+        self._open_detail_game: Game | None = None
 
         self._build_window_flags()
         self._build_ui()
@@ -89,6 +93,11 @@ class WidgetWindow(QWidget):
         self._filter_bar = LeagueFilterBar(self._enabled_leagues, self._frame)
         self._filter_bar.league_toggled.connect(self._on_league_toggled)
         frame_layout.addWidget(self._filter_bar)
+
+        # Live-game detail panel (hidden until a row's "More detail" is clicked)
+        self._detail_panel = DetailPanel(self._frame)
+        self._detail_panel.closed.connect(self._close_detail)
+        frame_layout.addWidget(self._detail_panel)
 
         # Scrollable game list
         self._scroll = QScrollArea(self._frame)
@@ -144,6 +153,8 @@ class WidgetWindow(QWidget):
         runnable = FetchRunnable()
         runnable.signals.snapshots_ready.connect(self._on_snapshots)
         QThreadPool.globalInstance().start(runnable)
+        if self._open_detail_event_id and self._open_detail_league:
+            self._dispatch_detail_fetch(self._open_detail_league, self._open_detail_event_id)
 
     def set_favorites(self, favorites: set[str]) -> None:
         self._favorites = set(favorites)
@@ -183,6 +194,48 @@ class WidgetWindow(QWidget):
     def _on_logo_ready(self, _league: str, _team_id: str) -> None:
         self._logo_render_timer.start()
 
+    # ---------- Detail panel ----------
+
+    def _on_detail_requested(self, league: str, event_id: str) -> None:
+        # Toggle off if clicking the same row's button again
+        if self._open_detail_event_id == event_id:
+            self._close_detail()
+            return
+
+        game = self._find_game(league, event_id)
+        if game is None:
+            return
+        self._open_detail_league = league  # type: ignore[assignment]
+        self._open_detail_event_id = event_id
+        self._open_detail_game = game
+        self._detail_panel.show_for(game)
+        self._dispatch_detail_fetch(league, event_id)  # type: ignore[arg-type]
+
+    def _close_detail(self) -> None:
+        self._open_detail_event_id = None
+        self._open_detail_league = None
+        self._open_detail_game = None
+        self._detail_panel.clear()
+
+    def _dispatch_detail_fetch(self, league: League, event_id: str) -> None:
+        runnable = DetailFetchRunnable(league, event_id)
+        runnable.signals.detail_ready.connect(self._on_detail_ready)
+        QThreadPool.globalInstance().start(runnable)
+
+    def _on_detail_ready(self, detail: GameDetail) -> None:
+        if detail.event_id != self._open_detail_event_id:
+            return
+        self._detail_panel.set_detail(detail)
+
+    def _find_game(self, league: str, event_id: str) -> Game | None:
+        snap = self._snapshots.get(league)  # type: ignore[arg-type]
+        if not snap:
+            return None
+        for g in snap.games:
+            if g.event_id == event_id:
+                return g
+        return None
+
     def _on_league_toggled(self, league: str, enabled: bool) -> None:
         if enabled:
             self._enabled_leagues.add(league)
@@ -213,6 +266,13 @@ class WidgetWindow(QWidget):
 
         self._stale_label.setVisible(any_error)
         self._stale_label.setToolTip("\n".join(error_msgs) if error_msgs else "")
+
+        # Auto-close the detail panel if its game finished or vanished.
+        if self._open_detail_event_id and self._open_detail_league:
+            current = self._find_game(self._open_detail_league, self._open_detail_event_id)
+            if current is None or current.state != "in":
+                self._close_detail()
+
         self._render()
 
     def _render(self) -> None:
@@ -260,6 +320,7 @@ class WidgetWindow(QWidget):
             for g in bucket:
                 is_fav = g.involves_any(self._favorites)
                 row = GameRow(g, is_favorite=is_fav)
+                row.detail_requested.connect(self._on_detail_requested)
                 self._list_layout.insertWidget(insert_at, row)
                 insert_at += 1
 

@@ -54,3 +54,70 @@ class LeagueSnapshot:
     games: list[Game] = field(default_factory=list)
     error: str | None = None  # set if last fetch failed
     fetched_at: datetime | None = None
+
+
+# --- Per-game live detail (summary endpoint) ---
+
+@dataclass
+class MLBDetail:
+    inning: str = ""           # "Top 5th"
+    balls: int = 0
+    strikes: int = 0
+    outs: int = 0
+    on_first: bool = False
+    on_second: bool = False
+    on_third: bool = False
+    pitcher_name: str = ""
+    pitcher_line: str = ""     # e.g. "67 P"
+    batter_name: str = ""
+    batter_line: str = ""      # e.g. "0-2"
+    last_play: str = ""
+
+
+@dataclass
+class NBADetail:
+    period: str = ""           # "Q3"
+    clock: str = ""            # "4:32"
+    away_leaders: list[tuple[str, str]] = field(default_factory=list)
+    home_leaders: list[tuple[str, str]] = field(default_factory=list)
+    last_play: str = ""
+
+
+@dataclass
+class NFLDetail:
+    period: str = ""
+    clock: str = ""
+    possession_abbr: str = ""
+    down_distance: str = ""    # "3rd & 7"
+    yard_line: str = ""        # "NYG 35"
+    last_play: str = ""
+
+
+@dataclass
+class NHLDetail:
+    period: str = ""
+    clock: str = ""
+    away_shots: int = 0
+    home_shots: int = 0
+    power_play: str = ""       # e.g. "TOR PP 2:14" or ""
+    away_leaders: list[tuple[str, str]] = field(default_factory=list)
+    home_leaders: list[tuple[str, str]] = field(default_factory=list)
+    last_play: str = ""
+
+
+@dataclass
+class GameDetail:
+    event_id: str
+    league: League
+    away_abbr: str = ""
+    home_abbr: str = ""
+    away_score: str = ""
+    home_score: str = ""
+    away_team_id: str = ""
+    home_team_id: str = ""
+    mlb: MLBDetail | None = None
+    nba: NBADetail | None = None
+    nfl: NFLDetail | None = None
+    nhl: NHLDetail | None = None
+    fetched_at: datetime | None = None
+    error: str | None = None

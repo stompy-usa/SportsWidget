@@ -6,8 +6,8 @@ from typing import get_args
 
 from PySide6.QtCore import QObject, QRunnable, Signal
 
-from espn_client import fetch_scoreboard
-from models import League, LeagueSnapshot
+from espn_client import fetch_scoreboard, fetch_summary
+from models import GameDetail, League, LeagueSnapshot
 
 LEAGUES: tuple[League, ...] = get_args(League)
 
@@ -40,3 +40,22 @@ class FetchRunnable(QRunnable):
 
         snapshots.sort(key=lambda s: LEAGUES.index(s.league))
         self.signals.snapshots_ready.emit(snapshots)
+
+
+class DetailFetchSignals(QObject):
+    detail_ready = Signal(object)  # GameDetail
+
+
+class DetailFetchRunnable(QRunnable):
+    """Fetches the rich summary for a single live game."""
+
+    def __init__(self, league: League, event_id: str) -> None:
+        super().__init__()
+        self.signals = DetailFetchSignals()
+        self.setAutoDelete(True)
+        self._league = league
+        self._event_id = event_id
+
+    def run(self) -> None:
+        detail: GameDetail = fetch_summary(self._league, self._event_id)
+        self.signals.detail_ready.emit(detail)
