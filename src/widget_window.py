@@ -173,7 +173,7 @@ class WidgetWindow(QWidget):
         if dlg.exec():
             self.set_favorites(dlg.selected_favorites())
 
-    def _on_logo_ready(self, _team_id: str) -> None:
+    def _on_logo_ready(self, _league: str, _team_id: str) -> None:
         self._logo_render_timer.start()
 
     def _on_section_toggled(self, key: str, collapsed: bool) -> None:

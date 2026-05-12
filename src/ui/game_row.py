@@ -55,14 +55,14 @@ class GameRow(QWidget):
             apply_text_shadow(star)
             layout.addWidget(star)
 
-        layout.addWidget(_team_widget(game.away_team_id, game.away_abbr, game.away_logo_url))
+        layout.addWidget(_team_widget(game.league, game.away_team_id, game.away_abbr, game.away_logo_url))
 
         at_label = QLabel("@")
         at_label.setObjectName("Matchup")
         apply_text_shadow(at_label)
         layout.addWidget(at_label)
 
-        layout.addWidget(_team_widget(game.home_team_id, game.home_abbr, game.home_logo_url))
+        layout.addWidget(_team_widget(game.league, game.home_team_id, game.home_abbr, game.home_logo_url))
 
         layout.addStretch(1)
 
@@ -133,9 +133,9 @@ class GameRow(QWidget):
         event.accept()
 
 
-def _team_widget(team_id: str, abbreviation: str, logo_url: str) -> QLabel:
+def _team_widget(league: str, team_id: str, abbreviation: str, logo_url: str) -> QLabel:
     cache = LogoCache.instance()
-    pix = cache.get(team_id)
+    pix = cache.get(league, team_id)
     label = QLabel()
     label.setObjectName("Matchup")
     label.setAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
@@ -145,6 +145,6 @@ def _team_widget(team_id: str, abbreviation: str, logo_url: str) -> QLabel:
     else:
         label.setText(abbreviation)
         if logo_url and team_id:
-            cache.request(team_id, logo_url)
+            cache.request(league, team_id, logo_url)
     apply_text_shadow(label)
     return label
