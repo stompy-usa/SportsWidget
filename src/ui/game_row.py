@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PySide6.QtCore import QEvent, QPoint, Qt, QUrl, Signal
+from PySide6.QtCore import QPoint, Qt, QUrl, Signal
 from PySide6.QtGui import QDesktopServices, QMouseEvent
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QWidget
 
@@ -18,7 +18,6 @@ class GameRow(QWidget):
     def __init__(self, game: Game, is_favorite: bool, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("GameRow")
-        self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
 
         self._league = game.league
         self._event_id = game.event_id
@@ -59,13 +58,14 @@ class GameRow(QWidget):
 
         layout.addStretch(1)
 
-        # "More detail" hover-revealed link for pre/live games (not post).
+        # "Game detail" link for pre/live games (not post). Always present so the
+        # hit area is stable — styled subtle by default, brighter on hover via QSS.
         if game.state in ("in", "pre"):
-            self._detail_btn = QPushButton("More detail", self)
+            self._detail_btn = QPushButton("Game detail", self)
             self._detail_btn.setObjectName("MoreDetailButton")
             self._detail_btn.setCursor(Qt.CursorShape.PointingHandCursor)
             self._detail_btn.setFlat(True)
-            self._detail_btn.setVisible(False)
+            self._detail_btn.setToolTip("Show live game detail")
             self._detail_btn.clicked.connect(self._emit_detail_requested)
             layout.addWidget(self._detail_btn)
 
@@ -134,18 +134,6 @@ class GameRow(QWidget):
         if was_click and self._url:
             QDesktopServices.openUrl(QUrl(self._url))
         event.accept()
-
-    # ---- Hover: reveal/hide the "More detail" button for live games ----
-
-    def enterEvent(self, event: QEvent) -> None:
-        if self._detail_btn is not None:
-            self._detail_btn.setVisible(True)
-        super().enterEvent(event)
-
-    def leaveEvent(self, event: QEvent) -> None:
-        if self._detail_btn is not None:
-            self._detail_btn.setVisible(False)
-        super().leaveEvent(event)
 
     def _emit_detail_requested(self) -> None:
         if self._event_id:

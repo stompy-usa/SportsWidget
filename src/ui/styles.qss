@@ -175,9 +175,9 @@ QPushButton#DetailEspnButton:hover {
     border: 1px solid #f5c542;
 }
 
-/* "More detail" reveal button on live rows */
+/* "Game detail" link on pre/live rows: subtle by default, brightens on hover */
 QPushButton#MoreDetailButton {
-    color: #ffffff;
+    color: rgba(255, 255, 255, 130);
     background: transparent;
     border: none;
     font-size: 11px;
