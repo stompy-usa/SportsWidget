@@ -267,10 +267,11 @@ class WidgetWindow(QWidget):
         self._stale_label.setVisible(any_error)
         self._stale_label.setToolTip("\n".join(error_msgs) if error_msgs else "")
 
-        # Auto-close the detail panel if its game finished or vanished.
+        # Auto-close the detail panel if the game finished or vanished.
+        # Pre <-> in transitions keep the panel open; only "post" closes it.
         if self._open_detail_event_id and self._open_detail_league:
             current = self._find_game(self._open_detail_league, self._open_detail_event_id)
-            if current is None or current.state != "in":
+            if current is None or current.state == "post":
                 self._close_detail()
 
         self._render()

@@ -137,15 +137,27 @@ class DetailPanel(QWidget):
             return
 
         if detail.mlb is not None:
-            _render_mlb(self._body_layout, detail.mlb)
+            if detail.state == "in":
+                _render_mlb_live(self._body_layout, detail.mlb)
+            else:
+                _render_mlb_pre(self._body_layout, detail, detail.mlb)
         elif detail.nba is not None:
-            _render_nba(self._body_layout, detail.nba, detail)
+            if detail.state == "in":
+                _render_nba_live(self._body_layout, detail.nba, detail)
+            else:
+                _render_nba_pre(self._body_layout, detail, detail.nba)
         elif detail.nfl is not None:
-            _render_nfl(self._body_layout, detail.nfl)
+            if detail.state == "in":
+                _render_nfl_live(self._body_layout, detail.nfl)
+            else:
+                _render_nfl_pre(self._body_layout, detail, detail.nfl)
         elif detail.nhl is not None:
-            _render_nhl(self._body_layout, detail.nhl, detail)
+            if detail.state == "in":
+                _render_nhl_live(self._body_layout, detail.nhl, detail)
+            else:
+                _render_nhl_pre(self._body_layout, detail, detail.nhl)
         else:
-            msg = QLabel("No live data available yet.")
+            msg = QLabel("No detail data available yet.")
             msg.setObjectName("DetailLine")
             apply_text_shadow(msg)
             self._body_layout.addWidget(msg)
@@ -214,7 +226,7 @@ def _add_last_play(layout: QVBoxLayout, text: str) -> None:
     layout.addWidget(lp)
 
 
-def _render_mlb(layout: QVBoxLayout, m: MLBDetail) -> None:
+def _render_mlb_live(layout: QVBoxLayout, m: MLBDetail) -> None:
     if m.inning:
         _add_line(layout, "Inning:", m.inning)
 
@@ -263,7 +275,7 @@ def _render_mlb(layout: QVBoxLayout, m: MLBDetail) -> None:
     _add_last_play(layout, m.last_play)
 
 
-def _render_nba(layout: QVBoxLayout, n: NBADetail, detail: GameDetail) -> None:
+def _render_nba_live(layout: QVBoxLayout, n: NBADetail, detail: GameDetail) -> None:
     if n.period or n.clock:
         _add_line(layout, "Period:", f"{n.period}  {n.clock}".strip())
     if n.away_leaders or n.home_leaders:
@@ -271,7 +283,7 @@ def _render_nba(layout: QVBoxLayout, n: NBADetail, detail: GameDetail) -> None:
     _add_last_play(layout, n.last_play)
 
 
-def _render_nfl(layout: QVBoxLayout, n: NFLDetail) -> None:
+def _render_nfl_live(layout: QVBoxLayout, n: NFLDetail) -> None:
     if n.period or n.clock:
         _add_line(layout, "Period:", f"{n.period}  {n.clock}".strip())
     if n.possession_abbr:
@@ -283,7 +295,7 @@ def _render_nfl(layout: QVBoxLayout, n: NFLDetail) -> None:
     _add_last_play(layout, n.last_play)
 
 
-def _render_nhl(layout: QVBoxLayout, n: NHLDetail, detail: GameDetail) -> None:
+def _render_nhl_live(layout: QVBoxLayout, n: NHLDetail, detail: GameDetail) -> None:
     if n.period or n.clock:
         _add_line(layout, "Period:", f"{n.period}  {n.clock}".strip())
     if n.away_shots or n.home_shots:
@@ -293,6 +305,177 @@ def _render_nhl(layout: QVBoxLayout, n: NHLDetail, detail: GameDetail) -> None:
     if n.away_leaders or n.home_leaders:
         _add_leaders_grid(layout, detail.away_abbr, n.away_leaders, detail.home_abbr, n.home_leaders)
     _add_last_play(layout, n.last_play)
+
+
+def _render_mlb_pre(layout: QVBoxLayout, detail: GameDetail, m: MLBDetail) -> None:
+    _add_record_row(layout, detail, m.away_record, m.home_record)
+
+    # Starting pitchers row (blank slot if not announced)
+    pitchers = QWidget()
+    pg = QGridLayout(pitchers)
+    pg.setContentsMargins(0, 2, 0, 2)
+    pg.setHorizontalSpacing(12)
+    pg.setVerticalSpacing(2)
+    title = QLabel("Starting Pitchers")
+    title.setObjectName("DetailLabel")
+    apply_text_shadow(title)
+    pg.addWidget(title, 0, 0, 1, 2)
+
+    away_sp = QLabel(_label_value(detail.away_abbr or "Away", m.away_probable_pitcher or "TBD"))
+    away_sp.setObjectName("DetailLine")
+    apply_text_shadow(away_sp)
+    home_sp = QLabel(_label_value(detail.home_abbr or "Home", m.home_probable_pitcher or "TBD"))
+    home_sp.setObjectName("DetailLine")
+    apply_text_shadow(home_sp)
+    pg.addWidget(away_sp, 1, 0)
+    pg.addWidget(home_sp, 1, 1)
+    layout.addWidget(pitchers)
+
+    # Lineups (two columns)
+    if m.away_lineup or m.home_lineup:
+        _add_two_column_list(
+            layout,
+            title="Lineups",
+            left_header=detail.away_abbr or "Away",
+            left_rows=[f"{pos}  {name}" if pos else name for pos, name in m.away_lineup],
+            right_header=detail.home_abbr or "Home",
+            right_rows=[f"{pos}  {name}" if pos else name for pos, name in m.home_lineup],
+            empty_placeholder="Lineup not yet announced",
+        )
+    else:
+        empty = QLabel("Lineups not yet announced.")
+        empty.setObjectName("DetailLastPlay")
+        apply_text_shadow(empty)
+        layout.addWidget(empty)
+
+
+def _render_nba_pre(layout: QVBoxLayout, detail: GameDetail, n: NBADetail) -> None:
+    _add_record_row(layout, detail, n.away_record, n.home_record)
+    # NBA pre-game: show season top leaders (already extracted) as a teaser
+    if n.away_leaders or n.home_leaders:
+        _add_leaders_grid(
+            layout,
+            detail.away_abbr,
+            n.away_leaders,
+            detail.home_abbr,
+            n.home_leaders,
+        )
+
+
+def _render_nfl_pre(layout: QVBoxLayout, detail: GameDetail, n: NFLDetail) -> None:
+    _add_record_row(layout, detail, n.away_record, n.home_record)
+
+
+def _render_nhl_pre(layout: QVBoxLayout, detail: GameDetail, n: NHLDetail) -> None:
+    _add_record_row(layout, detail, n.away_record, n.home_record)
+
+    # Starting goalies (blank if not announced)
+    goalies = QWidget()
+    gg = QGridLayout(goalies)
+    gg.setContentsMargins(0, 2, 0, 2)
+    gg.setHorizontalSpacing(12)
+    gg.setVerticalSpacing(2)
+    title = QLabel("Starting Goalies")
+    title.setObjectName("DetailLabel")
+    apply_text_shadow(title)
+    gg.addWidget(title, 0, 0, 1, 2)
+
+    away_g = QLabel(_label_value(detail.away_abbr or "Away", n.away_goalie or "TBD"))
+    away_g.setObjectName("DetailLine")
+    apply_text_shadow(away_g)
+    home_g = QLabel(_label_value(detail.home_abbr or "Home", n.home_goalie or "TBD"))
+    home_g.setObjectName("DetailLine")
+    apply_text_shadow(home_g)
+    gg.addWidget(away_g, 1, 0)
+    gg.addWidget(home_g, 1, 1)
+    layout.addWidget(goalies)
+
+    # Season leaders as a teaser
+    if n.away_leaders or n.home_leaders:
+        _add_leaders_grid(
+            layout,
+            detail.away_abbr,
+            n.away_leaders,
+            detail.home_abbr,
+            n.home_leaders,
+        )
+
+
+def _label_value(label: str, value: str) -> str:
+    return f"{label}:  {value}" if label else value
+
+
+def _add_record_row(layout: QVBoxLayout, detail: GameDetail, away_rec: str, home_rec: str) -> None:
+    if not (away_rec or home_rec):
+        return
+    row = QWidget()
+    rl = QHBoxLayout(row)
+    rl.setContentsMargins(0, 0, 0, 0)
+    rl.setSpacing(12)
+    if away_rec:
+        a = QLabel(f"{detail.away_abbr or 'Away'}  {away_rec}")
+        a.setObjectName("DetailLine")
+        apply_text_shadow(a)
+        rl.addWidget(a)
+    rl.addStretch(1)
+    if home_rec:
+        h = QLabel(f"{detail.home_abbr or 'Home'}  {home_rec}")
+        h.setObjectName("DetailLine")
+        apply_text_shadow(h)
+        rl.addWidget(h)
+    layout.addWidget(row)
+
+
+def _add_two_column_list(
+    layout: QVBoxLayout,
+    *,
+    title: str,
+    left_header: str,
+    left_rows: list[str],
+    right_header: str,
+    right_rows: list[str],
+    empty_placeholder: str,
+) -> None:
+    container = QWidget()
+    g = QGridLayout(container)
+    g.setContentsMargins(0, 2, 0, 2)
+    g.setHorizontalSpacing(12)
+    g.setVerticalSpacing(2)
+
+    if title:
+        title_lbl = QLabel(title)
+        title_lbl.setObjectName("DetailLabel")
+        apply_text_shadow(title_lbl)
+        g.addWidget(title_lbl, 0, 0, 1, 2)
+
+    left_hdr = QLabel(left_header)
+    left_hdr.setObjectName("DetailLabel")
+    apply_text_shadow(left_hdr)
+    right_hdr = QLabel(right_header)
+    right_hdr.setObjectName("DetailLabel")
+    apply_text_shadow(right_hdr)
+    g.addWidget(left_hdr, 1, 0)
+    g.addWidget(right_hdr, 1, 1)
+
+    rows = max(len(left_rows), len(right_rows))
+    if rows == 0:
+        ph = QLabel(empty_placeholder)
+        ph.setObjectName("DetailLastPlay")
+        apply_text_shadow(ph)
+        g.addWidget(ph, 2, 0, 1, 2)
+    else:
+        for i in range(rows):
+            if i < len(left_rows):
+                lbl = QLabel(left_rows[i])
+                lbl.setObjectName("DetailLine")
+                apply_text_shadow(lbl)
+                g.addWidget(lbl, i + 2, 0)
+            if i < len(right_rows):
+                lbl = QLabel(right_rows[i])
+                lbl.setObjectName("DetailLine")
+                apply_text_shadow(lbl)
+                g.addWidget(lbl, i + 2, 1)
+    layout.addWidget(container)
 
 
 def _add_leaders_grid(

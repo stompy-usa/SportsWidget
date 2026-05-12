@@ -59,7 +59,8 @@ class GameRow(QWidget):
 
         layout.addStretch(1)
 
-        if game.state == "in":
+        # "More detail" hover-revealed link for pre/live games (not post).
+        if game.state in ("in", "pre"):
             self._detail_btn = QPushButton("More detail", self)
             self._detail_btn.setObjectName("MoreDetailButton")
             self._detail_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -68,6 +69,7 @@ class GameRow(QWidget):
             self._detail_btn.clicked.connect(self._emit_detail_requested)
             layout.addWidget(self._detail_btn)
 
+        if game.state == "in":
             score = QLabel(f"{game.away_score} - {game.home_score}")
             score.setObjectName("ScoreText")
             apply_text_shadow(score)

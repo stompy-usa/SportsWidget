@@ -158,13 +158,13 @@ def fetch_summary(league: League, event_id: str) -> GameDetail:
         _populate_header(detail, data)
         situation = _pick_situation(data)
         if league == "mlb":
-            detail.mlb = _parse_mlb_situation(data, situation)
+            detail.mlb = _parse_mlb_summary(detail, data, situation)
         elif league == "nba":
-            detail.nba = _parse_nba_summary(data, situation)
+            detail.nba = _parse_nba_summary(detail, data, situation)
         elif league == "nfl":
-            detail.nfl = _parse_nfl_summary(data, situation)
+            detail.nfl = _parse_nfl_summary(detail, data, situation)
         elif league == "nhl":
-            detail.nhl = _parse_nhl_summary(data, situation)
+            detail.nhl = _parse_nhl_summary(detail, data, situation)
         detail.fetched_at = datetime.now(timezone.utc)
     except Exception as exc:  # noqa: BLE001
         log.debug("Summary parse trouble for %s/%s: %s", league, event_id, exc)
@@ -204,8 +204,38 @@ def _populate_header(detail: GameDetail, data: dict) -> None:
                 detail.away_abbr = abbr or detail.away_abbr
                 detail.away_team_id = tid or detail.away_team_id
                 detail.away_score = score or detail.away_score
+        # Game state ("pre" / "in" / "post")
+        state_value = ((comp.get("status") or {}).get("type") or {}).get("state")
+        if state_value in ("pre", "in", "post"):
+            detail.state = state_value  # type: ignore[assignment]
     except (KeyError, IndexError, TypeError):
         pass
+
+
+def _team_records(data: dict) -> tuple[str, str]:
+    """Return (away_record, home_record) using each competitor's 'total' record."""
+    away_rec = ""
+    home_rec = ""
+    try:
+        for c in data["header"]["competitions"][0]["competitors"]:
+            ha = c.get("homeAway")
+            records = c.get("record") or []
+            rec_str = ""
+            for r in records:
+                if r.get("type") == "total":
+                    rec_str = r.get("displayValue") or r.get("summary") or ""
+                    break
+            if ha == "away":
+                away_rec = rec_str
+            elif ha == "home":
+                home_rec = rec_str
+    except (KeyError, IndexError, TypeError):
+        pass
+    return (away_rec, home_rec)
+
+
+def _short_athlete_name(athlete: dict) -> str:
+    return athlete.get("shortName") or athlete.get("displayName") or athlete.get("fullName") or ""
 
 
 def _status_period_clock(data: dict) -> tuple[str, str]:
@@ -280,66 +310,103 @@ def _team_leaders(data: dict, home_or_away: str) -> list[tuple[str, str]]:
     return out
 
 
-def _parse_mlb_situation(data: dict, situation: dict) -> MLBDetail:
-    detail = MLBDetail()
-    # Inning string
+def _parse_mlb_summary(parent: GameDetail, data: dict, situation: dict) -> MLBDetail:
+    m = MLBDetail()
+
+    # In-game (situation) fields
     try:
-        detail.inning = (
+        m.inning = (
             (data["header"]["competitions"][0]["status"].get("type") or {}).get("shortDetail")
             or ""
         )
     except (KeyError, IndexError, TypeError):
         pass
 
-    if not situation:
-        return detail
+    if situation:
+        m.balls = int(situation.get("balls") or 0)
+        m.strikes = int(situation.get("strikes") or 0)
+        m.outs = int(situation.get("outs") or 0)
+        m.on_first = bool(situation.get("onFirst"))
+        m.on_second = bool(situation.get("onSecond"))
+        m.on_third = bool(situation.get("onThird"))
+        pitcher = situation.get("pitcher") or {}
+        m.pitcher_name = _short_athlete_name(pitcher.get("athlete") or {})
+        m.pitcher_line = pitcher.get("summary") or ""
+        batter = situation.get("batter") or {}
+        m.batter_name = _short_athlete_name(batter.get("athlete") or {})
+        m.batter_line = batter.get("summary") or ""
+        last = situation.get("lastPlay") or {}
+        m.last_play = last.get("text") or ""
 
-    detail.balls = int(situation.get("balls") or 0)
-    detail.strikes = int(situation.get("strikes") or 0)
-    detail.outs = int(situation.get("outs") or 0)
-    # ESPN sometimes returns these as booleans, sometimes as objects describing the runner.
-    detail.on_first = bool(situation.get("onFirst"))
-    detail.on_second = bool(situation.get("onSecond"))
-    detail.on_third = bool(situation.get("onThird"))
+    # Pre-game: probable starting pitchers from competitor.probables[]
+    try:
+        for c in data["header"]["competitions"][0]["competitors"]:
+            ha = c.get("homeAway")
+            probables = c.get("probables") or []
+            if not probables:
+                continue
+            # The starter is typically the first item with name=probableStartingPitcher;
+            # fall back to the first entry.
+            sp = next(
+                (p for p in probables if (p.get("name") or "").lower().startswith("probable")),
+                probables[0],
+            )
+            name = _short_athlete_name(sp.get("athlete") or {})
+            if ha == "away":
+                m.away_probable_pitcher = name
+            elif ha == "home":
+                m.home_probable_pitcher = name
+    except (KeyError, IndexError, TypeError):
+        pass
 
-    pitcher = situation.get("pitcher") or {}
-    p_ath = pitcher.get("athlete") or {}
-    detail.pitcher_name = p_ath.get("shortName") or p_ath.get("displayName") or ""
-    detail.pitcher_line = pitcher.get("summary") or ""
+    # Pre-game: starting lineup from rosters[]
+    for entry in data.get("rosters") or []:
+        team_id = str((entry.get("team") or {}).get("id") or "")
+        roster = entry.get("roster") or []
+        lineup: list[tuple[str, str]] = []
+        for r in roster:
+            if not r.get("starter"):
+                continue
+            ath = r.get("athlete") or {}
+            pos = (r.get("position") or {}).get("abbreviation") or ""
+            name = _short_athlete_name(ath)
+            if name:
+                lineup.append((pos, name))
+            if len(lineup) >= 9:
+                break
+        if not lineup:
+            continue
+        if team_id and team_id == parent.away_team_id:
+            m.away_lineup = lineup
+        elif team_id and team_id == parent.home_team_id:
+            m.home_lineup = lineup
 
-    batter = situation.get("batter") or {}
-    b_ath = batter.get("athlete") or {}
-    detail.batter_name = b_ath.get("shortName") or b_ath.get("displayName") or ""
-    detail.batter_line = batter.get("summary") or ""
-
-    last = situation.get("lastPlay") or {}
-    detail.last_play = last.get("text") or ""
-    return detail
+    m.away_record, m.home_record = _team_records(data)
+    return m
 
 
-def _parse_nba_summary(data: dict, situation: dict) -> NBADetail:
-    detail = NBADetail()
+def _parse_nba_summary(parent: GameDetail, data: dict, situation: dict) -> NBADetail:
+    n = NBADetail()
     period, clock = _status_period_clock(data)
-    detail.period = period
-    detail.clock = clock
-    detail.away_leaders = _team_leaders(data, "away")
-    detail.home_leaders = _team_leaders(data, "home")
+    n.period = period
+    n.clock = clock
+    n.away_leaders = _team_leaders(data, "away")
+    n.home_leaders = _team_leaders(data, "home")
     last = situation.get("lastPlay") if isinstance(situation, dict) else None
     if isinstance(last, dict):
-        detail.last_play = last.get("text") or ""
-    return detail
+        n.last_play = last.get("text") or ""
+    n.away_record, n.home_record = _team_records(data)
+    return n
 
 
-def _parse_nfl_summary(data: dict, situation: dict) -> NFLDetail:
-    detail = NFLDetail()
+def _parse_nfl_summary(parent: GameDetail, data: dict, situation: dict) -> NFLDetail:
+    n = NFLDetail()
     period, clock = _status_period_clock(data)
-    detail.period = period
-    detail.clock = clock
+    n.period = period
+    n.clock = clock
 
-    # Down / distance / yard line / possession come from situation when available,
-    # otherwise from drives.current.
     if situation:
-        detail.possession_abbr = (
+        n.possession_abbr = (
             ((situation.get("possession") or {}).get("abbreviation"))
             or situation.get("possessionText")
             or ""
@@ -347,33 +414,34 @@ def _parse_nfl_summary(data: dict, situation: dict) -> NFLDetail:
         down = situation.get("down")
         distance = situation.get("distance")
         if down and distance is not None:
-            detail.down_distance = f"{_ordinal(down)} & {distance}"
+            n.down_distance = f"{_ordinal(down)} & {distance}"
         elif situation.get("downDistanceText"):
-            detail.down_distance = situation["downDistanceText"]
-        detail.yard_line = situation.get("possessionText") or situation.get("yardLine") or ""
+            n.down_distance = situation["downDistanceText"]
+        n.yard_line = situation.get("possessionText") or situation.get("yardLine") or ""
         last = situation.get("lastPlay") or {}
-        detail.last_play = last.get("text") or ""
+        n.last_play = last.get("text") or ""
 
     try:
         drives = data.get("drives") or {}
         current = drives.get("current") or {}
-        if not detail.possession_abbr:
+        if not n.possession_abbr:
             team = current.get("team") or {}
-            detail.possession_abbr = team.get("abbreviation") or ""
+            n.possession_abbr = team.get("abbreviation") or ""
         plays = current.get("plays") or []
-        if plays and not detail.last_play:
-            detail.last_play = (plays[-1].get("text") or plays[-1].get("type", {}).get("text") or "")
+        if plays and not n.last_play:
+            n.last_play = (plays[-1].get("text") or plays[-1].get("type", {}).get("text") or "")
     except (AttributeError, TypeError):
         pass
 
-    return detail
+    n.away_record, n.home_record = _team_records(data)
+    return n
 
 
-def _parse_nhl_summary(data: dict, situation: dict) -> NHLDetail:
-    detail = NHLDetail()
+def _parse_nhl_summary(parent: GameDetail, data: dict, situation: dict) -> NHLDetail:
+    n = NHLDetail()
     period, clock = _short_period(data, prefix="P")
-    detail.period = period
-    detail.clock = clock
+    n.period = period
+    n.clock = clock
 
     # Shots-on-goal from boxscore.
     try:
@@ -387,26 +455,39 @@ def _parse_nhl_summary(data: dict, situation: dict) -> NHLDetail:
                     except (ValueError, IndexError):
                         continue
                     if ha == "home":
-                        detail.home_shots = v
+                        n.home_shots = v
                     elif ha == "away":
-                        detail.away_shots = v
+                        n.away_shots = v
                     break
     except (AttributeError, TypeError):
         pass
 
     if isinstance(situation, dict):
-        # ESPN occasionally surfaces power-play info under situation; fall back silently.
         pp = situation.get("powerPlay") or situation.get("strength") or ""
         if isinstance(pp, dict):
             pp = pp.get("text") or pp.get("displayName") or ""
-        detail.power_play = str(pp or "")
+        n.power_play = str(pp or "")
         last = situation.get("lastPlay") or {}
         if isinstance(last, dict):
-            detail.last_play = last.get("text") or ""
+            n.last_play = last.get("text") or ""
 
-    detail.away_leaders = _team_leaders(data, "away")
-    detail.home_leaders = _team_leaders(data, "home")
-    return detail
+    n.away_leaders = _team_leaders(data, "away")
+    n.home_leaders = _team_leaders(data, "home")
+
+    # Pre-game: starting goalies from top-level goalies = {homeTeam, awayTeam}
+    goalies = data.get("goalies")
+    if isinstance(goalies, dict):
+        away_g = goalies.get("awayTeam") or {}
+        home_g = goalies.get("homeTeam") or {}
+        away_athletes = away_g.get("athletes") or []
+        home_athletes = home_g.get("athletes") or []
+        if away_athletes:
+            n.away_goalie = _short_athlete_name(away_athletes[0])
+        if home_athletes:
+            n.home_goalie = _short_athlete_name(home_athletes[0])
+
+    n.away_record, n.home_record = _team_records(data)
+    return n
 
 
 def _ordinal(n: int) -> str:

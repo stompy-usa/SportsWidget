@@ -72,6 +72,13 @@ class MLBDetail:
     batter_name: str = ""
     batter_line: str = ""      # e.g. "0-2"
     last_play: str = ""
+    # Pre-game
+    away_probable_pitcher: str = ""
+    home_probable_pitcher: str = ""
+    away_lineup: list[tuple[str, str]] = field(default_factory=list)  # (position, name)
+    home_lineup: list[tuple[str, str]] = field(default_factory=list)
+    away_record: str = ""
+    home_record: str = ""
 
 
 @dataclass
@@ -81,6 +88,9 @@ class NBADetail:
     away_leaders: list[tuple[str, str]] = field(default_factory=list)
     home_leaders: list[tuple[str, str]] = field(default_factory=list)
     last_play: str = ""
+    # Pre-game
+    away_record: str = ""
+    home_record: str = ""
 
 
 @dataclass
@@ -91,6 +101,9 @@ class NFLDetail:
     down_distance: str = ""    # "3rd & 7"
     yard_line: str = ""        # "NYG 35"
     last_play: str = ""
+    # Pre-game
+    away_record: str = ""
+    home_record: str = ""
 
 
 @dataclass
@@ -103,12 +116,18 @@ class NHLDetail:
     away_leaders: list[tuple[str, str]] = field(default_factory=list)
     home_leaders: list[tuple[str, str]] = field(default_factory=list)
     last_play: str = ""
+    # Pre-game
+    away_goalie: str = ""
+    home_goalie: str = ""
+    away_record: str = ""
+    home_record: str = ""
 
 
 @dataclass
 class GameDetail:
     event_id: str
     league: League
+    state: GameState = "pre"       # so the panel knows which renderer to use
     away_abbr: str = ""
     home_abbr: str = ""
     away_score: str = ""
