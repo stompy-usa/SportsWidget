@@ -75,10 +75,14 @@ def _parse_event(league: League, ev: dict) -> Game | None:
             start_utc=start_utc,
             state=state,
             status_detail=status.get("shortDetail", "") or status.get("detail", ""),
+            home_team_id=_team_id(home),
             home_abbr=_abbr(home),
             home_score=str(home.get("score", "") or ""),
+            home_logo_url=_logo_url(home),
+            away_team_id=_team_id(away),
             away_abbr=_abbr(away),
             away_score=str(away.get("score", "") or ""),
+            away_logo_url=_logo_url(away),
         )
     except Exception as exc:  # noqa: BLE001
         log.debug("Skipping malformed event for %s: %s", league, exc)
@@ -93,6 +97,17 @@ def _abbr(competitor: dict) -> str:
         or team.get("displayName")
         or "?"
     )
+
+
+def _team_id(competitor: dict) -> str:
+    team = competitor.get("team", {}) or {}
+    return str(team.get("id", "") or "")
+
+
+def _logo_url(competitor: dict) -> str:
+    team = competitor.get("team", {}) or {}
+    # ESPN's scoreboard includes a "logo" key on the team object.
+    return team.get("logo", "") or ""
 
 
 def _parse_iso(s: str) -> datetime:

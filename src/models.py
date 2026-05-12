@@ -27,10 +27,14 @@ class Game:
     start_utc: datetime
     state: GameState
     status_detail: str  # e.g. "7:10 PM ET", "Top 5th", "Final"
+    home_team_id: str
     home_abbr: str
     home_score: str
+    home_logo_url: str
+    away_team_id: str
     away_abbr: str
     away_score: str
+    away_logo_url: str
 
     @property
     def home_key(self) -> str:

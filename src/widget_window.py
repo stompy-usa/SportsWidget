@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from fetch_worker import FetchRunnable
+from logo_cache import LogoCache
 from models import Game, League, LeagueSnapshot
 from settings_store import SettingsStore
 from ui.game_row import GameRow
@@ -48,6 +49,13 @@ class WidgetWindow(QWidget):
         self._timer = QTimer(self)
         self._timer.setInterval(REFRESH_INTERVAL_MS)
         self._timer.timeout.connect(self.refresh_now)
+
+        # Debounce: many logos may finish within milliseconds of each other.
+        self._logo_render_timer = QTimer(self)
+        self._logo_render_timer.setSingleShot(True)
+        self._logo_render_timer.setInterval(120)
+        self._logo_render_timer.timeout.connect(self._render)
+        LogoCache.instance().logo_ready.connect(self._on_logo_ready)
 
     # ---------- Window setup ----------
 
@@ -164,6 +172,9 @@ class WidgetWindow(QWidget):
         dlg = FavoritesDialog(self._favorites, self)
         if dlg.exec():
             self.set_favorites(dlg.selected_favorites())
+
+    def _on_logo_ready(self, _team_id: str) -> None:
+        self._logo_render_timer.start()
 
     def _on_section_toggled(self, key: str, collapsed: bool) -> None:
         self._collapsed[key] = collapsed
