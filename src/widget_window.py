@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import get_args
 
-from PySide6.QtCore import QPoint, QSize, Qt, QThreadPool, QTimer
+from PySide6.QtCore import QEvent, QObject, QPoint, QSize, Qt, QThreadPool, QTimer
 from PySide6.QtGui import QAction, QCloseEvent, QContextMenuEvent, QMouseEvent
 from PySide6.QtWidgets import (
     QFrame,
@@ -83,13 +83,8 @@ class WidgetWindow(QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
 
-        # WA_TransparentForMouseEvents on the decorative chassis lets clicks
-        # on any blank area fall through to WidgetWindow.mousePressEvent (which
-        # starts a drag). Children that need clicks (badges, buttons, rows,
-        # the size grip) are unaffected — the attribute does not propagate.
         self._frame = QFrame(self)
         self._frame.setObjectName("RootFrame")
-        self._frame.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         outer.addWidget(self._frame)
 
         frame_layout = QVBoxLayout(self._frame)
@@ -98,13 +93,11 @@ class WidgetWindow(QWidget):
 
         # League filter bar
         self._filter_bar = LeagueFilterBar(self._enabled_leagues, self._frame)
-        self._filter_bar.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         self._filter_bar.league_toggled.connect(self._on_league_toggled)
         frame_layout.addWidget(self._filter_bar)
 
         # Live-game detail panel (hidden until a row's "More detail" is clicked)
         self._detail_panel = DetailPanel(self._frame)
-        self._detail_panel.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         self._detail_panel.closed.connect(self._close_detail)
         frame_layout.addWidget(self._detail_panel)
 
@@ -113,13 +106,10 @@ class WidgetWindow(QWidget):
         self._scroll.setObjectName("GamesScrollArea")
         self._scroll.setWidgetResizable(True)
         self._scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self._scroll.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         self._scroll.viewport().setAutoFillBackground(False)
-        self._scroll.viewport().setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
 
         self._list_host = QWidget()
         self._list_host.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self._list_host.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         self._list_layout = QVBoxLayout(self._list_host)
         self._list_layout.setContentsMargins(4, 4, 4, 4)
         self._list_layout.setSpacing(2)
@@ -130,7 +120,6 @@ class WidgetWindow(QWidget):
         # Bottom row: stale indicator (left) + resize grip (right)
         bottom_row = QWidget(self._frame)
         bottom_row.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        bottom_row.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         bottom_layout = QHBoxLayout(bottom_row)
         bottom_layout.setContentsMargins(6, 0, 4, 4)
         bottom_layout.setSpacing(0)
@@ -138,7 +127,6 @@ class WidgetWindow(QWidget):
         self._stale_label = QLabel("• stale", bottom_row)
         self._stale_label.setObjectName("StaleIndicator")
         self._stale_label.setVisible(False)
-        self._stale_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         apply_text_shadow(self._stale_label)
         bottom_layout.addWidget(self._stale_label)
         bottom_layout.addStretch(1)
@@ -146,6 +134,23 @@ class WidgetWindow(QWidget):
         self._grip = QSizeGrip(bottom_row)
         bottom_layout.addWidget(self._grip, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
         frame_layout.addWidget(bottom_row)
+
+        # Drag-from-blank-space: each event filter intercepts ONLY left-button
+        # mouse press/move/release on the chassis widget's own area (children
+        # like badges/buttons/rows handle their own clicks normally). Wheel
+        # events on the scroll viewport are NOT filtered, so mouse-wheel
+        # scrolling still works as expected.
+        self._drag_targets: tuple[QWidget, ...] = (
+            self._frame,
+            self._filter_bar,
+            self._detail_panel,
+            self._scroll.viewport(),
+            self._list_host,
+            bottom_row,
+            self._stale_label,
+        )
+        for w in self._drag_targets:
+            w.installEventFilter(self)
 
     def _restore_geometry(self) -> None:
         geom = self._settings.load_geometry()
@@ -407,6 +412,29 @@ class WidgetWindow(QWidget):
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         self._drag_offset = None
         super().mouseReleaseEvent(event)
+
+    def eventFilter(self, obj: QObject, event: QEvent) -> bool:  # noqa: D401
+        """Forward left-mouse press/move/release on blank-area chassis widgets
+        to the window's drag handler. Wheel, right-click, etc. pass through."""
+        if obj not in self._drag_targets:
+            return super().eventFilter(obj, event)
+        t = event.type()
+        if t == QEvent.Type.MouseButtonPress:
+            me = event  # QMouseEvent
+            if me.button() == Qt.MouseButton.LeftButton and not self._locked:
+                self._drag_offset = me.globalPosition().toPoint() - self.frameGeometry().topLeft()
+                return True
+        elif t == QEvent.Type.MouseMove:
+            me = event
+            if self._drag_offset is not None and (me.buttons() & Qt.MouseButton.LeftButton):
+                self.move(me.globalPosition().toPoint() - self._drag_offset)
+                return True
+        elif t == QEvent.Type.MouseButtonRelease:
+            me = event
+            if me.button() == Qt.MouseButton.LeftButton and self._drag_offset is not None:
+                self._drag_offset = None
+                return True
+        return super().eventFilter(obj, event)
 
     def closeEvent(self, event: QCloseEvent) -> None:
         self._settings.save_geometry(self.saveGeometry())
