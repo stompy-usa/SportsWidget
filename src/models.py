@@ -70,10 +70,26 @@ class MLBDetail:
     on_second: bool = False
     on_third: bool = False
     pitcher_name: str = ""
-    pitcher_line: str = ""     # e.g. "67 P"
+    pitcher_line: str = ""     # legacy: e.g. "67 P" from situation summary
     batter_name: str = ""
-    batter_line: str = ""      # e.g. "0-2"
+    batter_line: str = ""      # legacy: e.g. "0-2"
     last_play: str = ""
+    # Live: enriched batter / pitcher detail from boxscore lookup
+    batting_team_abbr: str = ""
+    pitching_team_abbr: str = ""
+    batter_line_today: str = ""    # "1-4"  (hits-atBats)
+    batter_runs_today: str = ""
+    batter_rbi_today: str = ""
+    batter_avg: str = ""           # season avg ".257"
+    pitcher_innings: str = ""       # "6.0"
+    pitcher_hits_allowed: str = ""
+    pitcher_runs_allowed: str = ""
+    pitcher_earned_runs: str = ""
+    pitcher_walks: str = ""
+    pitcher_strikeouts: str = ""
+    pitcher_pitches_thrown: str = ""  # "104"
+    pitcher_era: str = ""            # season "3.91"
+    team_hits_today: str = ""        # batting team's hit total today
     # Pre-game
     away_probable_pitcher: str = ""
     home_probable_pitcher: str = ""

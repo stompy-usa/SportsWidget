@@ -351,6 +351,9 @@ def _parse_mlb_summary(parent: GameDetail, data: dict, situation: dict) -> MLBDe
         last = situation.get("lastPlay") or {}
         m.last_play = last.get("text") or ""
 
+        # Enrich batter/pitcher with stats from boxscore.players.
+        _populate_mlb_live_extras(parent, data, situation, m)
+
     # Pre-game: probable starting pitchers from competitor.probables[]
     try:
         for c in data["header"]["competitions"][0]["competitors"]:
@@ -396,6 +399,83 @@ def _parse_mlb_summary(parent: GameDetail, data: dict, situation: dict) -> MLBDe
 
     m.away_record, m.home_record = _team_records(data)
     return m
+
+
+def _populate_mlb_live_extras(
+    parent: GameDetail,
+    data: dict,
+    situation: dict,
+    m: MLBDetail,
+) -> None:
+    """Look up the current batter and pitcher in boxscore.players to fill in
+    today's line + season AVG/ERA + pitch count + team hit total."""
+    inning_lc = (m.inning or "").lower()
+    if inning_lc.startswith("top"):
+        m.batting_team_abbr = parent.away_abbr
+        m.pitching_team_abbr = parent.home_abbr
+        batting_team_abbr = parent.away_abbr
+        pitching_team_abbr = parent.home_abbr
+    elif inning_lc.startswith("bot"):
+        m.batting_team_abbr = parent.home_abbr
+        m.pitching_team_abbr = parent.away_abbr
+        batting_team_abbr = parent.home_abbr
+        pitching_team_abbr = parent.away_abbr
+    else:
+        # Middle of inning or unknown — can't safely attribute roles
+        return
+
+    batter_id = str(((situation.get("batter") or {}).get("playerId")) or "")
+    pitcher_id = str(((situation.get("pitcher") or {}).get("playerId")) or "")
+
+    for team_block in (data.get("boxscore") or {}).get("players") or []:
+        team_abbr = ((team_block.get("team") or {}).get("abbreviation")) or ""
+        for group in team_block.get("statistics") or []:
+            keys = group.get("keys") or []
+            for entry in group.get("athletes") or []:
+                ath = entry.get("athlete") or {}
+                ath_id = str(ath.get("id") or "")
+                stat_list = entry.get("stats") or []
+                stat_map = dict(zip(keys, stat_list))
+
+                # Batting stats group (identified by presence of hits-atBats key)
+                if "hits-atBats" in stat_map and team_abbr == batting_team_abbr:
+                    if batter_id and ath_id == batter_id:
+                        m.batter_name = (
+                            ath.get("shortName") or ath.get("displayName") or m.batter_name
+                        )
+                        m.batter_line_today = stat_map.get("hits-atBats") or ""
+                        m.batter_runs_today = stat_map.get("runs") or ""
+                        m.batter_rbi_today = stat_map.get("RBIs") or ""
+                        m.batter_avg = stat_map.get("avg") or ""
+
+                # Pitching stats group (identified by ERA / fullInnings.partInnings)
+                if ("fullInnings.partInnings" in stat_map or "ERA" in stat_map) and team_abbr == pitching_team_abbr:
+                    if pitcher_id and ath_id == pitcher_id:
+                        m.pitcher_name = (
+                            ath.get("shortName") or ath.get("displayName") or m.pitcher_name
+                        )
+                        m.pitcher_innings = stat_map.get("fullInnings.partInnings") or ""
+                        m.pitcher_hits_allowed = stat_map.get("hits") or ""
+                        m.pitcher_runs_allowed = stat_map.get("runs") or ""
+                        m.pitcher_earned_runs = stat_map.get("earnedRuns") or ""
+                        m.pitcher_walks = stat_map.get("walks") or ""
+                        m.pitcher_strikeouts = stat_map.get("strikeouts") or ""
+                        m.pitcher_pitches_thrown = stat_map.get("pitches") or ""
+                        m.pitcher_era = stat_map.get("ERA") or ""
+
+    # Team-level hit total for the batting team
+    for team_block in (data.get("boxscore") or {}).get("teams") or []:
+        team_abbr = ((team_block.get("team") or {}).get("abbreviation")) or ""
+        if team_abbr != batting_team_abbr:
+            continue
+        for stat_group in team_block.get("statistics") or []:
+            if (stat_group.get("name") or "").lower() != "batting":
+                continue
+            for stat in stat_group.get("stats") or []:
+                name = (stat.get("name") or "").lower()
+                if name == "hits":
+                    m.team_hits_today = str(stat.get("displayValue") or stat.get("value") or "")
+                    break
 
 
 def _parse_nba_summary(parent: GameDetail, data: dict, situation: dict) -> NBADetail:

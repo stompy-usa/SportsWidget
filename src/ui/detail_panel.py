@@ -31,11 +31,17 @@ class DetailPanel(QWidget):
         outer.setContentsMargins(8, 6, 8, 6)
         outer.setSpacing(4)
 
-        # ---- Header row: matchup + close ----
+        # ---- Header row: matchup centered, close on the right ----
         self._header_row = QWidget(self)
         header_layout = QHBoxLayout(self._header_row)
         header_layout.setContentsMargins(0, 0, 0, 0)
         header_layout.setSpacing(8)
+
+        # Invisible left-side spacer that mirrors the close-button width so the
+        # matchup content sits truly centered between the two stretches.
+        self._left_balance = QWidget(self._header_row)
+        header_layout.addWidget(self._left_balance)
+        header_layout.addStretch(1)
 
         self._away_logo = QLabel()
         self._away_logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -71,6 +77,9 @@ class DetailPanel(QWidget):
         self._close_btn.setToolTip("Close")
         self._close_btn.clicked.connect(self.closed.emit)
         header_layout.addWidget(self._close_btn)
+
+        # Match the left spacer to the close button so the matchup centers.
+        self._left_balance.setFixedWidth(self._close_btn.sizeHint().width())
 
         outer.addWidget(self._header_row)
 
@@ -266,12 +275,54 @@ def _render_mlb_live(layout: QVBoxLayout, m: MLBDetail) -> None:
     bl.addWidget(count_lbl)
     layout.addWidget(bases_row)
 
-    if m.pitcher_name:
-        pitcher_text = m.pitcher_name + (f"  ({m.pitcher_line})" if m.pitcher_line else "")
-        _add_line(layout, "Pitcher:", pitcher_text)
+    # ---- Batting team detail (current batter + team hits) ----
     if m.batter_name:
-        batter_text = m.batter_name + (f"  ({m.batter_line})" if m.batter_line else "")
-        _add_line(layout, "Batter:", batter_text)
+        batter_bits: list[str] = [m.batter_name]
+        if m.batter_line_today:
+            batter_bits.append(m.batter_line_today)
+        extras: list[str] = []
+        if m.batter_runs_today and m.batter_runs_today != "0":
+            extras.append(f"{m.batter_runs_today} R")
+        if m.batter_rbi_today and m.batter_rbi_today != "0":
+            extras.append(f"{m.batter_rbi_today} RBI")
+        if m.batter_avg:
+            extras.append(f"AVG {m.batter_avg}")
+        if extras:
+            batter_bits.append(" · ".join(extras))
+        label = f"Batting ({m.batting_team_abbr}):" if m.batting_team_abbr else "Batter:"
+        _add_line(layout, label, "  ".join(batter_bits))
+    elif m.pitcher_line:  # fallback to legacy summary
+        _add_line(layout, "Batter:", m.batter_line)
+
+    if m.team_hits_today:
+        team_label = m.batting_team_abbr or "Team"
+        _add_line(layout, "Team hits:", f"{team_label} {m.team_hits_today}")
+
+    # ---- Pitching team detail (current pitcher with full line) ----
+    if m.pitcher_name:
+        pitcher_bits: list[str] = [m.pitcher_name]
+        line_parts: list[str] = []
+        if m.pitcher_innings:
+            line_parts.append(f"{m.pitcher_innings} IP")
+        if m.pitcher_hits_allowed:
+            line_parts.append(f"{m.pitcher_hits_allowed} H")
+        if m.pitcher_earned_runs:
+            line_parts.append(f"{m.pitcher_earned_runs} ER")
+        if m.pitcher_walks:
+            line_parts.append(f"{m.pitcher_walks} BB")
+        if m.pitcher_strikeouts:
+            line_parts.append(f"{m.pitcher_strikeouts} K")
+        if line_parts:
+            pitcher_bits.append(" · ".join(line_parts))
+        if m.pitcher_pitches_thrown:
+            pitcher_bits.append(f"{m.pitcher_pitches_thrown} P")
+        if m.pitcher_era:
+            pitcher_bits.append(f"ERA {m.pitcher_era}")
+        label = f"Pitching ({m.pitching_team_abbr}):" if m.pitching_team_abbr else "Pitcher:"
+        _add_line(layout, label, "  ".join(pitcher_bits))
+    elif m.pitcher_line:
+        _add_line(layout, "Pitcher:", m.pitcher_line)
+
     _add_last_play(layout, m.last_play)
 
 
