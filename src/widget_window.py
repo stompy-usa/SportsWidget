@@ -83,8 +83,13 @@ class WidgetWindow(QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
 
+        # WA_TransparentForMouseEvents on the decorative chassis lets clicks
+        # on any blank area fall through to WidgetWindow.mousePressEvent (which
+        # starts a drag). Children that need clicks (badges, buttons, rows,
+        # the size grip) are unaffected — the attribute does not propagate.
         self._frame = QFrame(self)
         self._frame.setObjectName("RootFrame")
+        self._frame.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         outer.addWidget(self._frame)
 
         frame_layout = QVBoxLayout(self._frame)
@@ -93,11 +98,13 @@ class WidgetWindow(QWidget):
 
         # League filter bar
         self._filter_bar = LeagueFilterBar(self._enabled_leagues, self._frame)
+        self._filter_bar.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         self._filter_bar.league_toggled.connect(self._on_league_toggled)
         frame_layout.addWidget(self._filter_bar)
 
         # Live-game detail panel (hidden until a row's "More detail" is clicked)
         self._detail_panel = DetailPanel(self._frame)
+        self._detail_panel.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         self._detail_panel.closed.connect(self._close_detail)
         frame_layout.addWidget(self._detail_panel)
 
@@ -106,10 +113,13 @@ class WidgetWindow(QWidget):
         self._scroll.setObjectName("GamesScrollArea")
         self._scroll.setWidgetResizable(True)
         self._scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._scroll.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         self._scroll.viewport().setAutoFillBackground(False)
+        self._scroll.viewport().setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
 
         self._list_host = QWidget()
         self._list_host.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self._list_host.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         self._list_layout = QVBoxLayout(self._list_host)
         self._list_layout.setContentsMargins(4, 4, 4, 4)
         self._list_layout.setSpacing(2)
@@ -120,6 +130,7 @@ class WidgetWindow(QWidget):
         # Bottom row: stale indicator (left) + resize grip (right)
         bottom_row = QWidget(self._frame)
         bottom_row.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        bottom_row.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         bottom_layout = QHBoxLayout(bottom_row)
         bottom_layout.setContentsMargins(6, 0, 4, 4)
         bottom_layout.setSpacing(0)
@@ -127,6 +138,7 @@ class WidgetWindow(QWidget):
         self._stale_label = QLabel("• stale", bottom_row)
         self._stale_label.setObjectName("StaleIndicator")
         self._stale_label.setVisible(False)
+        self._stale_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         apply_text_shadow(self._stale_label)
         bottom_layout.addWidget(self._stale_label)
         bottom_layout.addStretch(1)

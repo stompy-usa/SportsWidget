@@ -66,13 +66,14 @@ class GameRow(QWidget):
         away_logo = _team_logo(game.league, game.away_team_id, game.away_logo_url, widths.logo_width)
         layout.addWidget(away_logo)
 
-        # Away name — RIGHT-aligned within its fixed-width column
+        # Away name — RIGHT-aligned. Min width keeps cross-row alignment;
+        # stretch=1 lets the column grow when the widget is resized wider.
         away_name = QLabel(game.away_short_name or game.away_abbr)
         away_name.setObjectName("TeamName")
-        away_name.setFixedWidth(widths.name_width)
+        away_name.setMinimumWidth(widths.name_width)
         away_name.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         apply_text_shadow(away_name)
-        layout.addWidget(away_name)
+        layout.addWidget(away_name, 1)
 
         # Away score — CENTERED. Blank for pre-game rows.
         away_score = QLabel(game.away_score if game.state in ("in", "post") else "")
@@ -82,14 +83,14 @@ class GameRow(QWidget):
         apply_text_shadow(away_score)
         layout.addWidget(away_score)
 
-        # Status (inning / Final / start time) — CENTERED
+        # Status (inning / Final / start time) — CENTERED, expanding
         status_text = _format_status(game)
         status = QLabel(status_text)
         status.setObjectName(_status_object_name(game.state))
-        status.setFixedWidth(widths.status_width)
+        status.setMinimumWidth(widths.status_width)
         status.setAlignment(Qt.AlignmentFlag.AlignCenter)
         apply_text_shadow(status)
-        layout.addWidget(status)
+        layout.addWidget(status, 1)
 
         # Home score — CENTERED. Blank for pre-game rows.
         home_score = QLabel(game.home_score if game.state in ("in", "post") else "")
@@ -99,21 +100,19 @@ class GameRow(QWidget):
         apply_text_shadow(home_score)
         layout.addWidget(home_score)
 
-        # Home name — LEFT-aligned within its fixed-width column
+        # Home name — LEFT-aligned, expanding (mirror of away name)
         home_name = QLabel(game.home_short_name or game.home_abbr)
         home_name.setObjectName("TeamName")
-        home_name.setFixedWidth(widths.name_width)
+        home_name.setMinimumWidth(widths.name_width)
         home_name.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         apply_text_shadow(home_name)
-        layout.addWidget(home_name)
+        layout.addWidget(home_name, 1)
 
         # Home logo
         home_logo = _team_logo(game.league, game.home_team_id, game.home_logo_url, widths.logo_width)
         layout.addWidget(home_logo)
 
-        layout.addStretch(1)
-
-        # "Game detail" link for pre/live games only
+        # "Game detail" link for pre/live games only — sits flush at the right edge
         if game.state in ("in", "pre"):
             self._detail_btn = QPushButton("Game detail", self)
             self._detail_btn.setObjectName("MoreDetailButton")
