@@ -236,46 +236,26 @@ def _add_last_play(layout: QVBoxLayout, text: str) -> None:
 
 
 def _render_mlb_live(layout: QVBoxLayout, m: MLBDetail) -> None:
+    # Inning bug — centered below the header score, no "Inning:" label.
     if m.inning:
-        _add_line(layout, "Inning:", m.inning)
+        inning_lbl = QLabel(m.inning)
+        inning_lbl.setObjectName("DetailInning")
+        inning_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        apply_text_shadow(inning_lbl)
+        layout.addWidget(inning_lbl)
 
-    # Bases diamond
-    diamond = QWidget()
-    grid = QGridLayout(diamond)
-    grid.setContentsMargins(0, 2, 0, 2)
-    grid.setHorizontalSpacing(2)
-    grid.setVerticalSpacing(2)
+    # Two-column body: batter/pitcher detail on the left, bases + count on right.
+    body_row = QWidget()
+    body_h = QHBoxLayout(body_row)
+    body_h.setContentsMargins(0, 0, 0, 0)
+    body_h.setSpacing(12)
 
-    def base_dot(occupied: bool) -> QLabel:
-        d = QLabel("")
-        d.setObjectName("BaseDot")
-        d.setProperty("occupied", "true" if occupied else "false")
-        d.setFixedSize(10, 10)
-        return d
+    # --- Left column: batting/pitching detail ---
+    left_col = QWidget()
+    left_v = QVBoxLayout(left_col)
+    left_v.setContentsMargins(0, 0, 0, 0)
+    left_v.setSpacing(2)
 
-    # 2nd top center, 3rd left middle, 1st right middle
-    grid.addWidget(base_dot(m.on_second), 0, 1)
-    grid.addWidget(base_dot(m.on_third), 1, 0)
-    grid.addWidget(base_dot(m.on_first), 1, 2)
-
-    bases_row = QWidget()
-    bl = QHBoxLayout(bases_row)
-    bl.setContentsMargins(0, 0, 0, 0)
-    bl.setSpacing(8)
-    bases_label = QLabel("Bases:")
-    bases_label.setObjectName("DetailLabel")
-    apply_text_shadow(bases_label)
-    bl.addWidget(bases_label)
-    bl.addWidget(diamond)
-    bl.addStretch(1)
-    count_text = f"{m.balls}-{m.strikes} · {m.outs} out{'s' if m.outs != 1 else ''}"
-    count_lbl = QLabel(count_text)
-    count_lbl.setObjectName("DetailLine")
-    apply_text_shadow(count_lbl)
-    bl.addWidget(count_lbl)
-    layout.addWidget(bases_row)
-
-    # ---- Batting team detail (current batter + team hits) ----
     if m.batter_name:
         batter_bits: list[str] = [m.batter_name]
         if m.batter_line_today:
@@ -290,15 +270,14 @@ def _render_mlb_live(layout: QVBoxLayout, m: MLBDetail) -> None:
         if extras:
             batter_bits.append(" · ".join(extras))
         label = f"Batting ({m.batting_team_abbr}):" if m.batting_team_abbr else "Batter:"
-        _add_line(layout, label, "  ".join(batter_bits))
-    elif m.pitcher_line:  # fallback to legacy summary
-        _add_line(layout, "Batter:", m.batter_line)
+        _add_line(left_v, label, "  ".join(batter_bits))
+    elif m.batter_line:
+        _add_line(left_v, "Batter:", m.batter_line)
 
     if m.team_hits_today:
         team_label = m.batting_team_abbr or "Team"
-        _add_line(layout, "Team hits:", f"{team_label} {m.team_hits_today}")
+        _add_line(left_v, "Team hits:", f"{team_label} {m.team_hits_today}")
 
-    # ---- Pitching team detail (current pitcher with full line) ----
     if m.pitcher_name:
         pitcher_bits: list[str] = [m.pitcher_name]
         line_parts: list[str] = []
@@ -319,9 +298,48 @@ def _render_mlb_live(layout: QVBoxLayout, m: MLBDetail) -> None:
         if m.pitcher_era:
             pitcher_bits.append(f"ERA {m.pitcher_era}")
         label = f"Pitching ({m.pitching_team_abbr}):" if m.pitching_team_abbr else "Pitcher:"
-        _add_line(layout, label, "  ".join(pitcher_bits))
+        _add_line(left_v, label, "  ".join(pitcher_bits))
     elif m.pitcher_line:
-        _add_line(layout, "Pitcher:", m.pitcher_line)
+        _add_line(left_v, "Pitcher:", m.pitcher_line)
+
+    left_v.addStretch(1)
+    body_h.addWidget(left_col, stretch=1)
+
+    # --- Right column: bases diamond + count/outs underneath ---
+    right_col = QWidget()
+    right_v = QVBoxLayout(right_col)
+    right_v.setContentsMargins(0, 0, 0, 0)
+    right_v.setSpacing(4)
+    right_v.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight)
+
+    diamond = QWidget()
+    grid = QGridLayout(diamond)
+    grid.setContentsMargins(0, 0, 0, 0)
+    grid.setHorizontalSpacing(2)
+    grid.setVerticalSpacing(2)
+
+    def base_dot(occupied: bool) -> QLabel:
+        d = QLabel("")
+        d.setObjectName("BaseDot")
+        d.setProperty("occupied", "true" if occupied else "false")
+        d.setFixedSize(10, 10)
+        return d
+
+    grid.addWidget(base_dot(m.on_second), 0, 1)
+    grid.addWidget(base_dot(m.on_third), 1, 0)
+    grid.addWidget(base_dot(m.on_first), 1, 2)
+    right_v.addWidget(diamond, 0, Qt.AlignmentFlag.AlignCenter)
+
+    count_text = f"{m.balls}-{m.strikes} · {m.outs} out{'s' if m.outs != 1 else ''}"
+    count_lbl = QLabel(count_text)
+    count_lbl.setObjectName("DetailLine")
+    count_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    apply_text_shadow(count_lbl)
+    right_v.addWidget(count_lbl, 0, Qt.AlignmentFlag.AlignCenter)
+
+    body_h.addWidget(right_col)
+
+    layout.addWidget(body_row)
 
     _add_last_play(layout, m.last_play)
 

@@ -180,6 +180,12 @@ QPushButton#DetailEspnButton:hover {
     font-size: 11px;
     font-style: italic;
 }
+#DetailInning {
+    color: #4ade80;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 1px;
+}
 
 /* Bases diamond */
 #BaseDot {
