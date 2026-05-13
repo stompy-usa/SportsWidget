@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import get_args
 
-from PySide6.QtCore import QEvent, QObject, QPoint, QSize, Qt, QThreadPool, QTimer
+from PySide6.QtCore import QCoreApplication, QEvent, QObject, QPoint, QSize, Qt, QThreadPool, QTimer
 from PySide6.QtGui import QAction, QCloseEvent, QContextMenuEvent, QMouseEvent
 from PySide6.QtWidgets import (
     QFrame,
@@ -414,8 +414,9 @@ class WidgetWindow(QWidget):
         super().mouseReleaseEvent(event)
 
     def eventFilter(self, obj: QObject, event: QEvent) -> bool:  # noqa: D401
-        """Forward left-mouse press/move/release on blank-area chassis widgets
-        to the window's drag handler. Wheel, right-click, etc. pass through."""
+        """Forward left-mouse drag and mouse-wheel from chassis widgets to the
+        window so blank areas behave like the content (drag to move, wheel to
+        scroll). Right-click, child clicks, etc. pass through."""
         if obj not in self._drag_targets:
             return super().eventFilter(obj, event)
         t = event.type()
@@ -434,6 +435,14 @@ class WidgetWindow(QWidget):
             if me.button() == Qt.MouseButton.LeftButton and self._drag_offset is not None:
                 self._drag_offset = None
                 return True
+        elif t == QEvent.Type.Wheel:
+            # The viewport handles its own wheel natively — let it through to
+            # avoid forwarding back to ourselves. Every other chassis widget
+            # forwards to the viewport so the user can scroll from anywhere.
+            if obj is self._scroll.viewport():
+                return False
+            QCoreApplication.sendEvent(self._scroll.viewport(), event)
+            return True
         return super().eventFilter(obj, event)
 
     def closeEvent(self, event: QCloseEvent) -> None:
