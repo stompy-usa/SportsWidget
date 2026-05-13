@@ -187,6 +187,22 @@ QPushButton#DetailEspnButton:hover {
     letter-spacing: 1px;
 }
 
+/* Event banner overlay (home run / strikeout / goal / 3-pointer / +2) */
+#EventBanner {
+    color: #ffffff;
+    font-size: 16px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    padding: 4px 14px;
+    border-radius: 14px;
+    background-color: rgba(0, 0, 0, 160);
+}
+#EventBanner[event="homerun"]    { background-color: rgba(245, 158, 11, 220); }
+#EventBanner[event="strikeout"]  { background-color: rgba(239, 68, 68, 220); }
+#EventBanner[event="goal"]       { background-color: rgba(239, 68, 68, 220); }
+#EventBanner[event="three"]      { background-color: rgba(74, 222, 128, 220); }
+#EventBanner[event="two"]        { background-color: rgba(74, 222, 128, 160); }
+
 /* Bases diamond */
 #BaseDot {
     border: 1px solid rgba(255, 255, 255, 140);

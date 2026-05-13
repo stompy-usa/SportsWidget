@@ -1,8 +1,16 @@
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, QUrl, Signal
-from PySide6.QtGui import QDesktopServices
+from PySide6.QtCore import (
+    QEasingCurve,
+    QEvent,
+    QPropertyAnimation,
+    Qt,
+    QUrl,
+    Signal,
+)
+from PySide6.QtGui import QColor, QDesktopServices
 from PySide6.QtWidgets import (
+    QGraphicsColorizeEffect,
     QGridLayout,
     QHBoxLayout,
     QLabel,
@@ -12,9 +20,26 @@ from PySide6.QtWidgets import (
 )
 
 from logo_cache import LOGO_HEIGHT_PX, LogoCache
-from models import Game, GameDetail, MLBDetail, NBADetail, NFLDetail, NHLDetail
+from models import Game, GameDetail, League, MLBDetail, NBADetail, NFLDetail, NHLDetail
+from ui.event_overlay import EventOverlay
 from ui.section_header import apply_text_shadow
 from urls import espn_game_url
+
+
+# (event_key, banner_text) tuples used by _classify_events
+_EVENT_HOMERUN = ("homerun", "💥  HOME RUN")
+_EVENT_STRIKEOUT = ("strikeout", "⚾  STRIKEOUT")
+_EVENT_GOAL = ("goal", "🚨  GOAL")
+_EVENT_THREE = ("three", "🎯  3 POINTER")
+_EVENT_TWO = ("two", "🏀  +2")
+# Priority order — first match wins when multiple events could fire at once.
+_EVENT_PRIORITY = (
+    _EVENT_HOMERUN,
+    _EVENT_STRIKEOUT,
+    _EVENT_GOAL,
+    _EVENT_THREE,
+    _EVENT_TWO,
+)
 
 
 class DetailPanel(QWidget):
@@ -105,10 +130,22 @@ class DetailPanel(QWidget):
         self._current_url = ""
         self._current_event_id = ""
 
+        # Event animation: state from the last refresh + overlay banner widget.
+        self._prev_state: dict[str, object] = {}
+        self._event_overlay = EventOverlay(self._body_container)
+        self._score_pulse_effect: QGraphicsColorizeEffect | None = None
+        self._score_pulse_anim: QPropertyAnimation | None = None
+
     # ---------- Public API ----------
 
     def show_for(self, game: Game) -> None:
         """Render the header skeleton immediately while the detail fetch is in flight."""
+        # Switching games (or opening fresh) resets the event-diff baseline so
+        # we don't fire spurious animations from the previous game's state.
+        if self._current_event_id != game.event_id:
+            self._prev_state = {}
+        self._event_overlay.stop()
+
         self._current_event_id = game.event_id
         self._current_url = espn_game_url(game.league, game.event_id)
 
@@ -131,9 +168,25 @@ class DetailPanel(QWidget):
         if not detail.event_id or detail.event_id != self._current_event_id:
             return
 
+        # Detect events by diffing the previous snapshot against the new one.
+        events_to_fire = _classify_events(self._prev_state, detail) if self._prev_state else []
+        score_changed = bool(self._prev_state) and (
+            self._prev_state.get("away_score") != _to_int(detail.away_score)
+            or self._prev_state.get("home_score") != _to_int(detail.home_score)
+        )
+
         # Update score if ESPN gave us a fresher value
         if detail.away_score or detail.home_score:
             self._score_label.setText(f"{detail.away_score or '0'} - {detail.home_score or '0'}")
+
+        if score_changed:
+            self._pulse_score()
+        if events_to_fire:
+            event_key, banner_text = events_to_fire[0]  # highest priority only
+            self._event_overlay.show_event(event_key, banner_text)
+
+        # Capture the new state for next diff (regardless of body re-render below)
+        self._prev_state = _capture_state(detail)
 
         self._clear_body()
 
@@ -174,8 +227,34 @@ class DetailPanel(QWidget):
     def clear(self) -> None:
         self._current_event_id = ""
         self._current_url = ""
+        self._prev_state = {}
+        self._event_overlay.stop()
         self._clear_body()
         self.setVisible(False)
+
+    def resizeEvent(self, event: QEvent) -> None:  # noqa: D401, N802
+        super().resizeEvent(event)
+        self._event_overlay.reposition()
+
+    def _pulse_score(self) -> None:
+        """Brief green tint on the score label so the user notices the change."""
+        if self._score_pulse_anim is not None:
+            self._score_pulse_anim.stop()
+        effect = QGraphicsColorizeEffect(self._score_label)
+        effect.setColor(QColor(74, 222, 128))  # same green as live status
+        effect.setStrength(0.0)
+        self._score_label.setGraphicsEffect(effect)
+        self._score_pulse_effect = effect
+
+        anim = QPropertyAnimation(effect, b"strength", self)
+        anim.setDuration(600)
+        anim.setStartValue(0.0)
+        anim.setKeyValueAt(0.35, 1.0)
+        anim.setEndValue(0.0)
+        anim.setEasingCurve(QEasingCurve.Type.InOutQuad)
+        anim.finished.connect(lambda: self._score_label.setGraphicsEffect(None))
+        anim.start()
+        self._score_pulse_anim = anim
 
     def current_event_id(self) -> str:
         return self._current_event_id
@@ -202,6 +281,80 @@ class DetailPanel(QWidget):
             label.setFixedHeight(LOGO_HEIGHT_PX + 2)
         else:
             label.clear()
+
+
+# ---------- Event detection helpers ----------
+
+def _to_int(value: str | int | None) -> int:
+    try:
+        return int(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return 0
+
+
+def _capture_state(detail: GameDetail) -> dict[str, object]:
+    """Snapshot the fields we diff between refreshes to detect events."""
+    state: dict[str, object] = {
+        "league": detail.league,
+        "away_score": _to_int(detail.away_score),
+        "home_score": _to_int(detail.home_score),
+    }
+    if detail.mlb is not None:
+        state["mlb_outs"] = detail.mlb.outs
+        state["mlb_strikes"] = detail.mlb.strikes
+        state["mlb_last_play"] = detail.mlb.last_play or ""
+    return state
+
+
+def _classify_events(prev: dict[str, object], detail: GameDetail) -> list[tuple[str, str]]:
+    """Return the events that fired between prev and detail, sorted by priority."""
+    matches: list[tuple[str, str]] = []
+    away_prev = _to_int(prev.get("away_score"))
+    home_prev = _to_int(prev.get("home_score"))
+    away_new = _to_int(detail.away_score)
+    home_new = _to_int(detail.home_score)
+    away_delta = away_new - away_prev
+    home_delta = home_new - home_prev
+    league: League = detail.league
+
+    if league == "mlb" and detail.mlb is not None:
+        last_play = (detail.mlb.last_play or "").lower()
+        prev_play = str(prev.get("mlb_last_play") or "").lower()
+        prev_outs = _to_int(prev.get("mlb_outs"))
+        prev_strikes = _to_int(prev.get("mlb_strikes"))
+
+        scored = away_delta > 0 or home_delta > 0
+        if scored and ("homer" in last_play or "home run" in last_play) and last_play != prev_play:
+            matches.append(_EVENT_HOMERUN)
+
+        # Strikeout: outs ticked up AND the strike count went from 1-2 back to 0.
+        if detail.mlb.outs > prev_outs and prev_strikes > 0 and detail.mlb.strikes == 0:
+            matches.append(_EVENT_STRIKEOUT)
+        # Backup heuristic: last-play text mentions strike out (handles cases
+        # where two outs happen between refreshes and the count check misses).
+        elif (
+            detail.mlb.outs > prev_outs
+            and last_play != prev_play
+            and ("strikes out" in last_play or "struck out" in last_play)
+        ):
+            matches.append(_EVENT_STRIKEOUT)
+
+    elif league == "nhl":
+        if away_delta == 1 or home_delta == 1:
+            matches.append(_EVENT_GOAL)
+
+    elif league == "nba":
+        # Only fire when exactly one team changed by exactly N points; if both
+        # teams scored in the same refresh window we can't safely attribute it.
+        single_three = (away_delta == 3 and home_delta == 0) or (home_delta == 3 and away_delta == 0)
+        single_two = (away_delta == 2 and home_delta == 0) or (home_delta == 2 and away_delta == 0)
+        if single_three:
+            matches.append(_EVENT_THREE)
+        elif single_two:
+            matches.append(_EVENT_TWO)
+
+    # Preserve priority order.
+    return [e for e in _EVENT_PRIORITY if e in matches]
 
 
 # ---------- Sport-specific renderers ----------
