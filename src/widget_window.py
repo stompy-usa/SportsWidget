@@ -436,12 +436,23 @@ class WidgetWindow(QWidget):
                 self._drag_offset = None
                 return True
         elif t == QEvent.Type.Wheel:
-            # The viewport handles its own wheel natively — let it through to
-            # avoid forwarding back to ourselves. Every other chassis widget
-            # forwards to the viewport so the user can scroll from anywhere.
+            # The viewport handles its own wheel natively. For other chassis
+            # widgets, drive the scroll bar directly — this is the most
+            # reliable path; sendEvent indirection wasn't reaching the scroll
+            # area's internal handler.
             if obj is self._scroll.viewport():
                 return False
-            QCoreApplication.sendEvent(self._scroll.viewport(), event)
+            bar = self._scroll.verticalScrollBar()
+            pixel = event.pixelDelta()
+            if not pixel.isNull() and pixel.y() != 0:
+                # Trackpad: pixel-precise
+                bar.setValue(bar.value() - pixel.y())
+            else:
+                angle_y = event.angleDelta().y()
+                if angle_y != 0:
+                    # Mouse wheel: 120 units per notch; ~60px per notch
+                    notches = angle_y / 120.0
+                    bar.setValue(bar.value() - int(notches * 60))
             return True
         return super().eventFilter(obj, event)
 
