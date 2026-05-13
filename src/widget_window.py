@@ -3,7 +3,19 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import get_args
 
-from PySide6.QtCore import QCoreApplication, QEvent, QObject, QPoint, QSize, Qt, QThreadPool, QTimer
+from PySide6.QtCore import (
+    QCoreApplication,
+    QEasingCurve,
+    QEvent,
+    QObject,
+    QPoint,
+    QPropertyAnimation,
+    QRect,
+    QSize,
+    Qt,
+    QThreadPool,
+    QTimer,
+)
 from PySide6.QtGui import QAction, QCloseEvent, QContextMenuEvent, QMouseEvent
 from PySide6.QtWidgets import (
     QFrame,
@@ -48,6 +60,7 @@ class WidgetWindow(QWidget):
         self._open_detail_event_id: str | None = None
         self._open_detail_league: League | None = None
         self._open_detail_game: Game | None = None
+        self._resize_anim: QPropertyAnimation | None = None
 
         self._build_window_flags()
         self._build_ui()
@@ -118,7 +131,8 @@ class WidgetWindow(QWidget):
         frame_layout.addWidget(self._scroll, stretch=1)
 
         # Bottom row: stale indicator (left) + resize grip (right)
-        bottom_row = QWidget(self._frame)
+        self._bottom_row = QWidget(self._frame)
+        bottom_row = self._bottom_row
         bottom_row.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         bottom_layout = QHBoxLayout(bottom_row)
         bottom_layout.setContentsMargins(6, 0, 4, 4)
@@ -229,12 +243,14 @@ class WidgetWindow(QWidget):
         self._open_detail_game = game
         self._detail_panel.show_for(game)
         self._dispatch_detail_fetch(league, event_id)  # type: ignore[arg-type]
+        self._animate_to_content_height()
 
     def _close_detail(self) -> None:
         self._open_detail_event_id = None
         self._open_detail_league = None
         self._open_detail_game = None
         self._detail_panel.clear()
+        self._animate_to_content_height()
 
     def _dispatch_detail_fetch(self, league: League, event_id: str) -> None:
         runnable = DetailFetchRunnable(league, event_id)
@@ -255,6 +271,54 @@ class WidgetWindow(QWidget):
                 return g
         return None
 
+    # ---------- Auto-resize ----------
+
+    def _compute_content_height(self) -> int:
+        """Sum the natural heights of every part of the chassis to find how
+        tall the window needs to be to show everything without scrolling."""
+        # Let Qt activate pending layouts so sizeHint values are fresh.
+        self._list_host.adjustSize()
+        self._filter_bar.adjustSize()
+        self._bottom_row.adjustSize()
+        if self._detail_panel.isVisible():
+            self._detail_panel.adjustSize()
+
+        fb = self._filter_bar.sizeHint().height()
+        dp = self._detail_panel.sizeHint().height() if self._detail_panel.isVisible() else 0
+        list_h = self._list_host.sizeHint().height()
+        br = self._bottom_row.sizeHint().height()
+        chrome = 4  # small fudge for inter-section spacing / rounding
+        total = fb + dp + list_h + br + chrome
+
+        # Cap so the widget never grows off-screen; floor so it stays usable.
+        screen = self.screen()
+        if screen is not None:
+            cap = int(screen.availableGeometry().height() * 0.85)
+            total = min(total, cap)
+        # Keep enough headroom that the filter bar + grip stay reachable, but
+        # let the widget actually shrink when sections collapse.
+        total = max(total, 90)
+        return total
+
+    def _animate_to_content_height(self) -> None:
+        """Smoothly grow / shrink the widget height to fit its current content."""
+        if self.isMinimized() or not self.isVisible():
+            return
+        target = self._compute_content_height()
+        current = self.height()
+        if abs(target - current) < 4:
+            return  # already there
+        if self._resize_anim is not None:
+            self._resize_anim.stop()
+        geo = self.geometry()
+        anim = QPropertyAnimation(self, b"geometry", self)
+        anim.setDuration(260)
+        anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        anim.setStartValue(geo)
+        anim.setEndValue(QRect(geo.x(), geo.y(), geo.width(), target))
+        anim.start()
+        self._resize_anim = anim
+
     def _on_league_toggled(self, league: str, enabled: bool) -> None:
         if enabled:
             self._enabled_leagues.add(league)
@@ -262,11 +326,13 @@ class WidgetWindow(QWidget):
             self._enabled_leagues.discard(league)
         self._settings.save_enabled_leagues(self._enabled_leagues)
         self._render()
+        self._animate_to_content_height()
 
     def _on_section_toggled(self, key: str, collapsed: bool) -> None:
         self._collapsed[key] = collapsed
         self._settings.save_collapsed_sections(self._collapsed)
         self._render()
+        self._animate_to_content_height()
 
     def _on_snapshots(self, snapshots: list[LeagueSnapshot]) -> None:
         any_error = False
