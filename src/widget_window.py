@@ -276,7 +276,13 @@ class WidgetWindow(QWidget):
     def _compute_content_height(self) -> int:
         """Sum the natural heights of every part of the chassis to find how
         tall the window needs to be to show everything without scrolling."""
-        # Let Qt activate pending layouts so sizeHint values are fresh.
+        # Force every dirty layout in the tree to recompute so sizeHints are
+        # fresh — without this, sections we just expanded still report their
+        # old (smaller) heights.
+        list_layout = self._list_host.layout()
+        if list_layout is not None:
+            list_layout.invalidate()
+            list_layout.activate()
         self._list_host.adjustSize()
         self._filter_bar.adjustSize()
         self._bottom_row.adjustSize()
@@ -285,7 +291,9 @@ class WidgetWindow(QWidget):
 
         fb = self._filter_bar.sizeHint().height()
         dp = self._detail_panel.sizeHint().height() if self._detail_panel.isVisible() else 0
-        list_h = self._list_host.sizeHint().height()
+        # Read the LAYOUT's sizeHint rather than the widget's so we get the
+        # natural content height regardless of the scroll area's clipping.
+        list_h = list_layout.sizeHint().height() if list_layout is not None else self._list_host.sizeHint().height()
         br = self._bottom_row.sizeHint().height()
         chrome = 4  # small fudge for inter-section spacing / rounding
         total = fb + dp + list_h + br + chrome
@@ -301,7 +309,15 @@ class WidgetWindow(QWidget):
         return total
 
     def _animate_to_content_height(self) -> None:
-        """Smoothly grow / shrink the widget height to fit its current content."""
+        """Smoothly grow / shrink the widget height to fit its current content.
+
+        Deferred to the next event-loop tick so Qt has time to finalize any
+        pending layout pass — without this, expanding a section measures the
+        list at its old (smaller) height and the widget refuses to grow.
+        """
+        QTimer.singleShot(0, self._do_animate_to_content_height)
+
+    def _do_animate_to_content_height(self) -> None:
         if self.isMinimized() or not self.isVisible():
             return
         target = self._compute_content_height()
