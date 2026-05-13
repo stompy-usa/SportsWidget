@@ -16,12 +16,14 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from PySide6.QtGui import QFont, QFontMetrics
+
 from fetch_worker import DetailFetchRunnable, FetchRunnable
 from logo_cache import LogoCache
 from models import Game, GameDetail, League, LeagueSnapshot
 from settings_store import SettingsStore
 from ui.detail_panel import DetailPanel
-from ui.game_row import GameRow
+from ui.game_row import ColumnWidths, GameRow, _format_status
 from ui.league_filter_bar import LeagueFilterBar
 from ui.section_header import SectionHeader, apply_text_shadow
 
@@ -305,6 +307,10 @@ class WidgetWindow(QWidget):
             else:
                 buckets["TOMORROW"].append(g)
 
+        # Compute column widths from the current set of games so every row
+        # uses identical column dimensions — gives a spreadsheet-aligned look.
+        widths = _compute_column_widths(games)
+
         insert_at = 0
         for key in SECTION_ORDER:
             bucket = buckets[key]
@@ -320,7 +326,7 @@ class WidgetWindow(QWidget):
                 continue
             for g in bucket:
                 is_fav = g.involves_any(self._favorites)
-                row = GameRow(g, is_favorite=is_fav)
+                row = GameRow(g, is_favorite=is_fav, widths=widths)
                 row.detail_requested.connect(self._on_detail_requested)
                 self._list_layout.insertWidget(insert_at, row)
                 insert_at += 1
@@ -400,3 +406,38 @@ class WidgetWindow(QWidget):
         """Called from main on real quit — persist final state."""
         self._settings.save_geometry(self.saveGeometry())
         self._settings.sync()
+
+
+def _compute_column_widths(games: list[Game]) -> ColumnWidths:
+    """Measure the widest team name and status across all visible games and
+    return fixed column widths so every row uses identical column dimensions."""
+    name_font = QFont()
+    name_font.setPixelSize(14)
+    name_font.setWeight(QFont.Weight.Medium)
+    name_fm = QFontMetrics(name_font)
+
+    score_font = QFont()
+    score_font.setPixelSize(15)
+    score_font.setBold(True)
+    score_fm = QFontMetrics(score_font)
+
+    status_font = QFont()
+    status_font.setPixelSize(11)
+    status_fm = QFontMetrics(status_font)
+
+    name_max = name_fm.horizontalAdvance("Diamondbacks")  # generous floor
+    status_max = status_fm.horizontalAdvance("Scheduled")
+    for g in games:
+        away_name = g.away_short_name or g.away_abbr
+        home_name = g.home_short_name or g.home_abbr
+        name_max = max(name_max, name_fm.horizontalAdvance(away_name), name_fm.horizontalAdvance(home_name))
+        # Use the formatted status (matches what the row actually renders)
+        formatted = _format_status(g)
+        if formatted:
+            status_max = max(status_max, status_fm.horizontalAdvance(formatted))
+
+    return ColumnWidths(
+        name_width=name_max + 8,
+        score_width=score_fm.horizontalAdvance("99") + 10,
+        status_width=status_max + 14,
+    )

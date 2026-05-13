@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from PySide6.QtCore import QPoint, Qt, QUrl, Signal
 from PySide6.QtGui import QDesktopServices, QMouseEvent
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QWidget
@@ -12,13 +14,30 @@ from urls import espn_game_url
 _DRAG_THRESHOLD_PX = 4  # Manhattan distance before a press becomes a drag
 
 
+@dataclass
+class ColumnWidths:
+    """Per-column pixel widths shared across all rows for spreadsheet alignment."""
+    name_width: int = 110
+    score_width: int = 28
+    status_width: int = 80
+    star_width: int = 14
+    logo_width: int = LOGO_HEIGHT_PX + 6
+
+
 class GameRow(QWidget):
     detail_requested = Signal(str, str)  # (league, event_id)
 
-    def __init__(self, game: Game, is_favorite: bool, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        game: Game,
+        is_favorite: bool,
+        widths: ColumnWidths | None = None,
+        parent: QWidget | None = None,
+    ) -> None:
         super().__init__(parent)
         self.setObjectName("GameRow")
 
+        widths = widths or ColumnWidths()
         self._league = game.league
         self._event_id = game.event_id
         self._url = espn_game_url(game.league, game.event_id)
@@ -32,56 +51,69 @@ class GameRow(QWidget):
             self.setToolTip("Open on ESPN")
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(8, 4, 8, 4)
-        layout.setSpacing(6)
+        layout.setContentsMargins(8, 3, 8, 3)
+        layout.setSpacing(4)
 
-        if is_favorite:
-            star = QLabel("★")
-            star.setObjectName("FavoriteStar")
-            apply_text_shadow(star)
-            layout.addWidget(star)
+        # Favorite star — always reserve the column so rows stay aligned.
+        star = QLabel("★" if is_favorite else "")
+        star.setObjectName("FavoriteStar")
+        star.setFixedWidth(widths.star_width)
+        star.setAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
+        apply_text_shadow(star)
+        layout.addWidget(star)
 
-        # --- Away group: logo, name, score ---
-        layout.addWidget(_team_logo(game.league, game.away_team_id, game.away_logo_url))
+        # Away logo
+        away_logo = _team_logo(game.league, game.away_team_id, game.away_logo_url, widths.logo_width)
+        layout.addWidget(away_logo)
 
+        # Away name — RIGHT-aligned within its fixed-width column
         away_name = QLabel(game.away_short_name or game.away_abbr)
         away_name.setObjectName("TeamName")
+        away_name.setFixedWidth(widths.name_width)
+        away_name.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         apply_text_shadow(away_name)
         layout.addWidget(away_name)
 
-        if game.state in ("in", "post"):
-            away_score = QLabel(game.away_score or "0")
-            away_score.setObjectName("TeamScore")
-            apply_text_shadow(away_score)
-            layout.addWidget(away_score)
+        # Away score — CENTERED. Blank for pre-game rows.
+        away_score = QLabel(game.away_score if game.state in ("in", "post") else "")
+        away_score.setObjectName("TeamScore")
+        away_score.setFixedWidth(widths.score_width)
+        away_score.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        apply_text_shadow(away_score)
+        layout.addWidget(away_score)
 
-        layout.addStretch(1)
+        # Status (inning / Final / start time) — CENTERED
+        status_text = _format_status(game)
+        status = QLabel(status_text)
+        status.setObjectName(_status_object_name(game.state))
+        status.setFixedWidth(widths.status_width)
+        status.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        apply_text_shadow(status)
+        layout.addWidget(status)
 
-        # --- Status (middle) ---
-        status_text = game.status_detail or _default_status(game.state)
-        if status_text:
-            status = QLabel(status_text)
-            status.setObjectName(_status_object_name(game.state))
-            apply_text_shadow(status)
-            layout.addWidget(status)
+        # Home score — CENTERED. Blank for pre-game rows.
+        home_score = QLabel(game.home_score if game.state in ("in", "post") else "")
+        home_score.setObjectName("TeamScore")
+        home_score.setFixedWidth(widths.score_width)
+        home_score.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        apply_text_shadow(home_score)
+        layout.addWidget(home_score)
 
-        layout.addStretch(1)
-
-        # --- Home group: score, name, logo (mirrored) ---
-        if game.state in ("in", "post"):
-            home_score = QLabel(game.home_score or "0")
-            home_score.setObjectName("TeamScore")
-            apply_text_shadow(home_score)
-            layout.addWidget(home_score)
-
+        # Home name — LEFT-aligned within its fixed-width column
         home_name = QLabel(game.home_short_name or game.home_abbr)
         home_name.setObjectName("TeamName")
+        home_name.setFixedWidth(widths.name_width)
+        home_name.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         apply_text_shadow(home_name)
         layout.addWidget(home_name)
 
-        layout.addWidget(_team_logo(game.league, game.home_team_id, game.home_logo_url))
+        # Home logo
+        home_logo = _team_logo(game.league, game.home_team_id, game.home_logo_url, widths.logo_width)
+        layout.addWidget(home_logo)
 
-        # --- Game detail link (pre/live only) ---
+        layout.addStretch(1)
+
+        # "Game detail" link for pre/live games only
         if game.state in ("in", "pre"):
             self._detail_btn = QPushButton("Game detail", self)
             self._detail_btn.setObjectName("MoreDetailButton")
@@ -135,13 +167,13 @@ class GameRow(QWidget):
             self.detail_requested.emit(self._league, self._event_id)
 
 
-def _team_logo(league: str, team_id: str, logo_url: str) -> QLabel:
-    """Logo-only widget; the team name lives in a sibling QLabel."""
+def _team_logo(league: str, team_id: str, logo_url: str, fixed_width: int) -> QLabel:
     cache = LogoCache.instance()
     pix = cache.get(league, team_id)
     label = QLabel()
     label.setObjectName("TeamLogo")
     label.setAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
+    label.setFixedWidth(fixed_width)
     if pix is not None:
         label.setPixmap(pix)
         label.setFixedHeight(LOGO_HEIGHT_PX + 2)
@@ -163,3 +195,21 @@ def _default_status(state: str) -> str:
     if state == "post":
         return "Final"
     return ""
+
+
+def _format_status(game: Game) -> str:
+    """Compact status text for the status column.
+
+    Pre-game rows show only the local start time (sections already convey the date).
+    Live rows show ESPN's short detail (e.g. "Bot 5th"). Post rows show "Final".
+    """
+    if game.state == "pre":
+        try:
+            local = game.start_utc.astimezone()
+            # "%I:%M %p" -> "07:10 PM"; trim leading zero to "7:10 PM"
+            return local.strftime("%I:%M %p").lstrip("0")
+        except Exception:  # noqa: BLE001
+            return game.status_detail or ""
+    if game.state == "post":
+        return game.status_detail or "Final"
+    return game.status_detail or ""
